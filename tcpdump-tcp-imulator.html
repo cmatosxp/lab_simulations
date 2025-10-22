@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tcpdump Simulator Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Set the Inter font as default */
+        html { font-family: 'Inter', sans-serif; }
+        /* Monospace font for the terminal area */
+        #terminal-output, #terminal-input-line { font-family: 'Hack', 'Fira Code', 'Roboto Mono', monospace; }
+        .blinking-cursor {
+            animation: blink 1s step-start infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 min-h-screen p-4">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'kali-green': '#00ff88',
+                        'kali-dark': '#1e293b',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <div class="max-w-4xl mx-auto">
+        <!-- Header & Action Button -->
+        <div class="flex justify-between items-center mb-4">
+            <div>
+                <h1 class="text-3xl font-bold text-kali-green mb-2">
+                    Cybersecurity Lab: tcpdump Simulator
+                </h1>
+                <p class="text-sm text-gray-400">
+                    Use the **STOP CAPTURE** button or type **`stop`** to halt an active process.
+                </p>
+            </div>
+            <button id="stop-button" 
+                    class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-md shadow-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed" 
+                    disabled>
+                STOP CAPTURE
+            </button>
+        </div>
+
+        <!-- Terminal Container -->
+        <div id="terminal-container" class="bg-kali-dark border-2 border-kali-green rounded-lg shadow-2xl p-4 overflow-y-scroll h-[60vh]">
+            <div id="terminal-output" class="text-sm">
+                <p class="text-kali-green">[kali@lab ~]$ <span class="text-gray-200">Welcome to your virtual lab. Type 'help' for available commands.</span></p>
+            </div>
+            
+            <!-- Input Prompt -->
+            <div id="terminal-input-line" class="flex items-center mt-2">
+                <span id="prompt" class="text-kali-green">[kali@lab ~]$ </span>
+                <input type="text" id="command-input" class="bg-transparent text-gray-200 flex-grow border-none focus:outline-none ml-1 p-0" autofocus>
+                <span class="blinking-cursor text-kali-green">█</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const outputElement = document.getElementById('terminal-output');
+        const inputElement = document.getElementById('command-input');
+        const containerElement = document.getElementById('terminal-container');
+        const promptSpan = document.getElementById('prompt');
+        const cursorSpan = document.querySelector('.blinking-cursor');
+        const stopButton = document.getElementById('stop-button'); 
+
+        // Removed API_KEY and API_URL_BASE since Gemini analysis is removed
+        let captureInterval = null;
+        let capturedPackets = [];
+        const MAX_PACKETS_TO_SAVE = 10;
+        let isSudo = false;
+        let originalStopFunction = null; 
+
+        // --- Utility Functions ---
+
+        /** Simulates scrolling to the bottom of the terminal. */
+        function scrollToBottom() {
+            containerElement.scrollTop = containerElement.scrollHeight;
+        }
+
+        /** Prints a line of text to the terminal output. */
+        function printOutput(text, color = 'text-gray-200') {
+            const p = document.createElement('p');
+            p.innerHTML = text;
+            p.className = `whitespace-pre-wrap ${color}`;
+            outputElement.appendChild(p);
+            scrollToBottom();
+        }
+
+        /** Generates a random IP address string. */
+        function generateIP() {
+            return `192.168.1.${Math.floor(Math.random() * 254) + 1}`;
+        }
+
+        /** Generates a random port number string. */
+        function generatePort() {
+            return Math.floor(Math.random() * 65535);
+        }
+
+        /** Generates a specific, realistic TCP handshake packet based on step. */
+        function generateHandshakePacket(step) {
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.123456';
+            const clientIP = '192.168.1.155'; // Use our eth0 IP for realism
+            const serverIP = '192.168.1.1'; // Use router/gateway IP for realism
+            const clientPort = '54321';
+            const serverPort = '443'; 
+            let line = `${time} IP `;
+            let flag, src, dst, seq, ack;
+
+            // Step 1: SYN (Client -> Server)
+            if (step === 1) {
+                src = `${clientIP}.${clientPort}`;
+                dst = `${serverIP}.${serverPort}`;
+                flag = '[S]';
+                seq = 1000;
+                ack = 0;
+            } 
+            // Step 2: SYN, ACK (Server -> Client)
+            else if (step === 2) {
+                src = `${serverIP}.${serverPort}`;
+                dst = `${clientIP}.${clientPort}`;
+                flag = '[S.]'; // SYN-ACK is typically S. or SA in tcpdump, S. is common.
+                seq = 5000;
+                ack = 1001; // Acknowledges client's sequence + 1
+            }
+            // Step 3: ACK (Client -> Server)
+            else if (step === 3) {
+                src = `${clientIP}.${clientPort}`;
+                dst = `${serverIP}.${serverPort}`;
+                flag = '[.]'; // Simple ACK
+                seq = 1001; // Client sequence number doesn't change here
+                ack = 5001; // Acknowledges server's sequence + 1
+            } else {
+                return generatePacket();
+            }
+
+            line += `${src} > ${dst}: Flags ${flag}, seq ${seq}, ack ${ack}, win 29200, length 0`;
+            return line;
+        }
+
+        /** Generates a simulated tcpdump packet line for general/random traffic. */
+        function generatePacket(protocol = 'tcp') {
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.123456';
+            const src = `${generateIP()}.${generatePort()}`;
+            const dst = `${generateIP()}.${generatePort()}`;
+            const length = Math.floor(Math.random() * 100) + 40; // 40 to 140 bytes
+
+            let line = `${time} IP ${src} > ${dst}: `;
+
+            if (protocol === 'tcp') {
+                // Flags for PUSH/ACK/FIN traffic, leaving SYN/SYN-ACK for the handshake function
+                const flags = ['[P.]', '[.]', '[F.]', '[R]'][Math.floor(Math.random() * 4)];
+                const seq = Math.floor(Math.random() * 99999) + 1000;
+                line += `Flags ${flags}, seq ${seq}, ack 1, win 29200, length 0`;
+            } else if (protocol === 'udp') {
+                line += `UDP, length ${length}`;
+            } else if (protocol === 'icmp') {
+                line += `ICMP echo request, id 1, seq 1, length ${length}`;
+            } else if (protocol === 'arp') {
+                line = `${time} ARP, Request who-has ${generateIP()} tell ${generateIP()}, length 46`;
+            } else { // verbose or mixed
+                const protos = ['tcp', 'udp', 'icmp', 'arp'];
+                return generatePacket(protos[Math.floor(Math.random() * protos.length)]);
+            }
+
+            return line;
+        }
+
+        /** Generates a simulated verbose tcpdump packet line. */
+        function generateVerbosePacket() {
+            const line = generatePacket('tcp');
+            const ttl = Math.floor(Math.random() * 100) + 64;
+            const tos = Math.floor(Math.random() * 255);
+            return `<span class="text-yellow-400">${line}</span> <span class="text-gray-500">(ttl ${ttl}, id ${Math.floor(Math.random() * 65535)}, len ${Math.floor(Math.random() * 1500)})</span>`;
+        }
+
+
+        // --- New Commands for Workflow Integration ---
+
+        function handleNmap(ipRange) {
+            printOutput(`Starting Nmap 7.92 ( https://nmap.org ) at ${new Date().toLocaleString()}`);
+            printOutput(`Nmap scan report for router (192.168.1.1)`);
+            printOutput(`Host is up (0.001s latency).`);
+            printOutput(`Not shown: 996 closed tcp ports (reset)`);
+            printOutput(`PORT     STATE SERVICE`);
+            printOutput(`22/tcp   open  ssh`);
+            printOutput(`80/tcp   open  http`);
+            printOutput(`443/tcp  open  https`);
+            printOutput(`3389/tcp open  ms-wbt-server`);
+            printOutput(`Nmap done: 256 IP addresses (4 hosts up) scanned in 1.23 seconds`, 'text-green-400');
+        }
+
+        function handleWireshark(filename) {
+            if (capturedPackets.length === 0) {
+                printOutput(`Wireshark: The file "${filename}" does not exist or is empty. Run 'tcpdump -w <filename>' first.`, 'text-red-400');
+                return;
+            }
+            printOutput(`\n[+] Opening ${filename} in Wireshark GUI...`, 'text-yellow-400');
+            printOutput(`Simulating the graphical display of ${capturedPackets.length} packets.`);
+            printOutput(`Common columns observed: No., Time, Source, Destination, Protocol, Length, Info (TCP handshake, sequence numbers, etc.)`);
+            printOutput(`[Hint: In a real lab, you would now filter and inspect protocols visually. Note the SYN, SYN-ACK, ACK sequence at the start of the capture.]`);
+        }
+
+        // --- Core Command Handlers ---
+
+        function handleHelp() {
+            printOutput("Available simulated commands:");
+            printOutput("  ip a                                  # Find interface names (eth0)");
+            printOutput("  sudo tcpdump -n -i eth0 -v            # Task 1: Start a live, verbose capture (Unfiltered)");
+            printOutput("  tcpdump -n tcp                        # Task 2: Filter for TCP packets");
+            printOutput("  tcpdump -w <filename>.pcap            # Task 3: Write captured packets to file (Includes SYN handshake)");
+            printOutput("  tcpdump -r <filename>.pcap            # Task 3: Read packets from a saved file");
+            printOutput("  nmap -sT 192.168.1.1/24               # Simulate Nmap TCP Connect scan ⭐");
+            printOutput("  wireshark <filename>.pcap             # Simulate opening a file in Wireshark ⭐");
+            printOutput("  stop                                  # Stop any running live capture");
+            printOutput("  clear / cls                           # Clear the terminal screen");
+        }
+
+        function handleIP() {
+            printOutput("1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000");
+            printOutput("    inet 127.0.0.1/8 scope host lo");
+            printOutput("2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000", 'text-green-400');
+            printOutput("    inet 192.168.1.155/24 brd 192.168.1.255 scope global dynamic eth0");
+            printOutput("    valid_lft 86326sec preferred_lft 86326sec");
+        }
+        
+        // This function handles the standard cleanup for streaming captures
+        function stopStreamingCapture() {
+            if (captureInterval) {
+                clearInterval(captureInterval);
+                captureInterval = null;
+
+                // Restore input prompt
+                promptSpan.classList.remove('hidden');
+                inputElement.classList.remove('hidden');
+                cursorSpan.classList.remove('hidden');
+                stopButton.disabled = true;
+
+                printOutput(`^C`, 'text-red-400');
+                printOutput(`100 packets captured`);
+                printOutput(`100 packets received by filter`);
+                printOutput(`0 packets dropped by kernel`);
+
+                // If we were using an overridden stop function (for -w), restore the original one
+                if (originalStopFunction) {
+                    stopLiveCapture = originalStopFunction;
+                    originalStopFunction = null;
+                }
+            } else {
+                printOutput("No active capture to stop.");
+            }
+        }
+
+        // Global function that will be called by 'stop' command or 'stop-button'
+        let stopLiveCapture = stopStreamingCapture;
+
+        function startLiveCapture(generatorFunction) {
+            if (captureInterval) {
+                printOutput("A capture is already running. Type 'stop' or click the button to end it.", 'text-red-400');
+                return;
+            }
+            
+            printOutput("tcpdump: listening on eth0, link-type EN10MB (Ethernet), capture size 262144 bytes", 'text-green-400');
+
+            // Hide input prompt during streaming capture
+            promptSpan.classList.add('hidden');
+            inputElement.classList.add('hidden');
+            cursorSpan.classList.add('hidden');
+            stopButton.disabled = false;
+
+            // Start streaming output
+            captureInterval = setInterval(() => {
+                printOutput(generatorFunction());
+            }, 500);
+        }
+
+        function handleWriteCapture(filename) {
+            if (filename.split('.pcap').length === 1) { // Basic check if .pcap is missing
+                printOutput(`tcpdump: Can't open ${filename}: Invalid argument (must end with .pcap)`, 'text-red-400');
+                return;
+            }
+
+            if (captureInterval) {
+                printOutput("A capture is already running. Type 'stop' or click the button to end it.", 'text-red-400');
+                return;
+            }
+
+            capturedPackets = [];
+            printOutput(`tcpdump: listening on eth0, link-type EN10MB (Ethernet), capture size 262144 bytes`, 'text-green-400');
+            printOutput(`Writing to file ${filename}. Press Ctrl+C or type 'stop' to stop capture...`);
+
+            stopButton.disabled = false;
+            
+            // --- Inject the three-way handshake packets manually (SYN, SYN-ACK, ACK) ---
+            capturedPackets.push(generateHandshakePacket(1)); // SYN
+            printOutput('.. (SYN)', 'text-yellow-400');
+            capturedPackets.push(generateHandshakePacket(2)); // SYN-ACK
+            printOutput('.. (SYN-ACK)', 'text-yellow-400');
+            capturedPackets.push(generateHandshakePacket(3)); // ACK
+            printOutput('.. (ACK)', 'text-yellow-400');
+
+            // Simulate capture process for remaining packets
+            let count = 3; // Start count after handshake
+            const totalPacketsToSave = MAX_PACKETS_TO_SAVE;
+
+            const captureTimer = setInterval(() => {
+                if (count < totalPacketsToSave) {
+                    const packet = generatePacket(); // Use original random packet generator for data flow
+                    capturedPackets.push(packet);
+                    printOutput('..', 'text-yellow-400'); // Indicate progress
+                    count++;
+                } else {
+                    // Auto-stop after max packets
+                    stopLiveCapture(); // Call the currently active stop function
+                }
+            }, 100);
+
+            // Override global stopLiveCapture for file writing cleanup
+            captureInterval = captureTimer; // Track the interval
+            originalStopFunction = stopLiveCapture; // Save the streaming stop logic
+            
+            // Define the temporary stop function for file writing
+            stopLiveCapture = () => {
+                if (captureInterval) {
+                    clearInterval(captureInterval);
+                    captureInterval = null;
+                    stopButton.disabled = true;
+
+                    printOutput(`\n${capturedPackets.length} packets written to ${filename}`);
+                    printOutput('Note: Captured packets are stored in memory for this simulation.', 'text-gray-500');
+                    
+                    // Restore original stop function
+                    stopLiveCapture = originalStopFunction;
+                    originalStopFunction = null;
+                }
+                // Restore input prompt elements (they weren't hidden, but good for cleanup)
+                promptSpan.classList.remove('hidden');
+                inputElement.classList.remove('hidden');
+                cursorSpan.classList.remove('hidden');
+            };
+        }
+
+        function handleReadCapture(filename) {
+            if (capturedPackets.length === 0) {
+                printOutput(`tcpdump: ${filename}: No such file or directory. Try writing a capture first!`, 'text-red-400');
+                return;
+            }
+
+            printOutput(`Reading from file ${filename}...`);
+            capturedPackets.forEach(packet => printOutput(packet));
+            printOutput(`${capturedPackets.length} packets successfully read.`);
+        }
+        
+        // --- Core Command Handlers (no analyze_capture) ---
+
+        function handleCommand() {
+            const command = inputElement.value.trim();
+            if (command === '') {
+                printOutput(promptSpan.innerText.replace(' ', ''));
+                return;
+            }
+
+            // Print the executed command before processing
+            printOutput(promptSpan.innerText + `<span class="${isSudo ? 'text-red-400' : 'text-gray-200'}">${command}</span>`);
+
+            // Clear the input field immediately
+            inputElement.value = '';
+
+            const parts = command.split(/\s+/);
+            const cmd = parts[0];
+
+            if (captureInterval && cmd !== 'stop') {
+                printOutput("A live capture is running. Please use the 'STOP CAPTURE' button or type 'stop' to end the capture first.", 'text-red-400');
+                return;
+            }
+            
+            // Check for 'sudo' status
+            isSudo = command.startsWith('sudo');
+            
+            if (cmd === 'stop') {
+                stopLiveCapture(); // Call the currently active stop function
+                isSudo = false;
+                return;
+            }
+
+            switch (command) {
+                case 'help':
+                    handleHelp();
+                    break;
+                case 'ip a':
+                    handleIP();
+                    break;
+                case 'clear':
+                case 'cls':
+                    outputElement.innerHTML = '';
+                    break;
+                case 'sudo tcpdump -n -i eth0 -v':
+                    startLiveCapture(generateVerbosePacket);
+                    break;
+                case 'tcpdump -n tcp':
+                    startLiveCapture(() => generatePacket('tcp'));
+                    break;
+                default:
+                    if (cmd === 'tcpdump') {
+                        // Check for -w (write) command
+                        if (parts.includes('-w') && parts.length === 3) {
+                            const filename = parts[2];
+                            handleWriteCapture(filename);
+                        }
+                        // Check for -r (read) command
+                        else if (parts.includes('-r') && parts.length === 3) {
+                            const filename = parts[2];
+                            handleReadCapture(filename);
+                        } else {
+                             printOutput(`tcpdump: command not recognized or unsupported flags. Type 'help'.`, 'text-red-400');
+                        }
+                    } else if (cmd === 'nmap') {
+                         if (parts.length === 3 && parts[1] === '-sT') {
+                             handleNmap(parts[2]);
+                         } else {
+                             printOutput(`Usage: nmap -sT <ip_range> (e.g., nmap -sT 192.168.1.1/24)`, 'text-red-400');
+                         }
+                    } else if (cmd === 'wireshark') {
+                         if (parts.length === 2 && parts[1].endsWith('.pcap')) {
+                             handleWireshark(parts[1]);
+                         } else {
+                             printOutput(`Usage: wireshark <filename.pcap>. Run 'tcpdump -w' first.`, 'text-red-400');
+                         }
+                    } else {
+                         printOutput(`${cmd}: command not found`, 'text-red-400');
+                    }
+            }
+        }
+
+        // --- Event Listeners ---
+
+        // Handle command input on Enter key press
+        inputElement.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleCommand();
+            }
+        });
+
+        // New: Handle stop button click
+        stopButton.addEventListener('click', () => {
+            if (!stopButton.disabled) {
+                stopLiveCapture();
+                inputElement.focus();
+            }
+        });
+
+        // Ensure the input is focused when clicking anywhere in the terminal area
+        containerElement.addEventListener('click', () => {
+            inputElement.focus();
+        });
+
+        // Initial setup for input sizing
+        function updateInputWidth() {
+            // Get the width of the prompt text
+            const promptWidth = promptSpan.offsetWidth;
+            // Set the input element's width to fill the remaining space
+            inputElement.style.width = `calc(100% - ${promptWidth + 10}px)`; 
+        }
+
+        window.addEventListener('load', updateInputWidth);
+        window.addEventListener('resize', updateInputWidth);
+        
+        // Initial welcome message and focus
+        inputElement.focus();
+
+    </script>
+</body>
+</html>
