@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Linux Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Using Inter font from Tailwind's default config */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom styles for the terminal */
+        #terminal-container {
+            /* Fira Code is a great monospaced font, falling back to Tailwind's mono stack */
+            font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            height: 80vh; /* Reduced height slightly to make guide more visible */
+        }
+        
+        /* Custom scrollbar for a more 'terminal' feel */
+        #terminal-output::-webkit-scrollbar {
+            width: 8px;
+        }
+        #terminal-output::-webkit-scrollbar-track {
+            background: #1e293b; /* bg-slate-800 */
+        }
+        #terminal-output::-webkit-scrollbar-thumb {
+            background-color: #475569; /* bg-slate-600 */
+            border-radius: 4px;
+        }
+        #terminal-output::-webkit-scrollbar-thumb:hover {
+            background-color: #64748b; /* bg-slate-500 */
+        }
+
+        /* Blinking cursor effect */
+        #cursor {
+            display: inline-block;
+            width: 8px;
+            height: 1.2em;
+            background-color: #f8fafc; /* bg-slate-50 */
+            animation: blink 1s step-end infinite;
+            margin-left: 2px;
+            vertical-align: middle;
+        }
+
+        @keyframes blink {
+            from, to {
+                background-color: transparent;
+            }
+            50% {
+                background-color: #f8fafc; /* bg-slate-50 */
+            }
+        }
+        
+        /* Ensure input field is invisible but functional */
+        #terminal-input {
+            position: absolute;
+            left: -9999px;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+        }
+    </style>
+</head>
+<!-- UPDATED: Use flex-col to stack items, remove justify-center to align to top -->
+<body class="bg-slate-900 text-slate-50 flex flex-col items-center min-h-screen p-4">
+
+    <!-- UPDATED: Added margin-top for spacing -->
+    <div id="terminal-container" class="w-full max-w-4xl h-[80vh] bg-black/80 rounded-lg shadow-2xl backdrop-blur-sm border border-slate-700 overflow-hidden flex flex-col mt-8">
+        <!-- Terminal Header -->
+        <div class="bg-slate-800 p-2.5 flex items-center justify-between rounded-t-lg border-b border-slate-700">
+            <div class="flex space-x-2">
+                <span class="w-3.5 h-3.5 bg-red-500 rounded-full block"></span>
+                <span class="w-3.5 h-3.5 bg-yellow-500 rounded-full block"></span>
+                <span class="w-3.5 h-3.5 bg-green-500 rounded-full block"></span>
+            </div>
+            <span class="text-sm text-slate-400">user@web-terminal: ~</span>
+        </div>
+
+        <!-- Terminal Output -->
+        <!-- FIXED: Removed onclick="focusInput()" attribute. The event listener is handled in JS. -->
+        <div id="terminal-output" class="flex-1 p-4 overflow-y-auto text-sm leading-relaxed">
+            <!-- Welcome Message -->
+            <div class="text-green-400">Welcome to the interactive Linux terminal simulator!</div>
+            <div>Type <span class="text-cyan-400">'help'</span> to see a list of available commands.</div>
+            <br>
+        </div>
+
+        <!-- Terminal Input Line -->
+        <div class="p-4 pt-2 border-t border-slate-700">
+            <div class="flex">
+                <span class="text-cyan-400 mr-2 shrink-0">
+                    <span id="prompt-user">user@web-terminal:</span><span id="prompt-path">~</span>$
+                </span>
+                <div class="relative w-full">
+                    <span id="input-display" class="whitespace-pre-wrap break-all"></span>
+                    <span id="cursor"></span>
+                    <input type="text" id="terminal-input" class="bg-transparent border-none text-transparent w-full focus:outline-none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW SECTION: Added based on user query -->
+    <div id="operators-guide" class="w-full max-w-4xl mt-12 mb-12 p-6 bg-slate-800 rounded-lg border border-slate-700 shadow-lg">
+        <h1 class="text-3xl font-bold text-green-400 mb-6">Linux Operators</h1>
+        <p class="text-lg leading-relaxed mt-4">
+            Here are some important operators:
+        </p>
+
+        <!-- Operators Table -->
+        <div class="overflow-x-auto mt-6">
+            <table class="w-full text-left border-collapse border border-slate-600">
+                <thead class="bg-slate-700">
+                    <tr>
+                        <th class="border border-slate-600 p-3 text-cyan-400">Symbol / Operator</th>
+                        <th class="border border-slate-600 p-3">Description</th>
+                    </tr>
+                </thead>
+                <tbody class="align-top">
+                    <tr class="bg-slate-800/50">
+                        <td class="border border-slate-600 p-3"><code class="text-yellow-400 bg-black/30 px-2 py-1 rounded">&</code></td>
+                        <td class="border border-slate-600 p-3">This operator allows you to run commands in the background of your terminal.</td>
+                    </tr>
+                    <tr>
+                        <td class="border border-slate-600 p-3"><code class="text-yellow-400 bg-black/30 px-2 py-1 rounded">&&</code></td>
+                        <td class="border border-slate-600 p-3">This operator allows you to combine multiple commands together in one line of your terminal.</td>
+                    </tr>
+                    <tr class="bg-slate-800/50">
+                        <td class="border border-slate-600 p-3"><code class="text-yellow-400 bg-black/30 px-2 py-1 rounded">&gt;</code></td>
+                        <td class="border border-slate-600 p-3">This operator is a redirector - meaning that we can take the output from a command (such as using cat to output a file) and direct it elsewhere.</td>
+                    </tr>
+                    <tr>
+                        <td class="border border-slate-600 p-3"><code class="text-yellow-400 bg-black/30 px-2 py-1 rounded">&gt;&gt;</code></td>
+                        <td class="border border-slate-600 p-3">This operator does the same function of the <code>&gt;</code> operator but appends the output rather than replacing (meaning nothing is overwritten).</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <!-- End new section -->
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const terminalOutput = document.getElementById('terminal-output');
+            const terminalInput = document.getElementById('terminal-input');
+            const inputDisplay = document.getElementById('input-display');
+            const promptPath = document.getElementById('prompt-path');
+            const terminalContainer = document.getElementById('terminal-container');
+
+            let commandHistory = [];
+            let historyIndex = -1;
+            let currentInput = "";
+
+            // --- Mock Filesystem ---
+            let filesystem = {
+                'home': {
+                    'user': {
+                        'Documents': {
+                            'README.md': 'This is a simple README file.\nYou can practice `cat`, `rm`, and `ls` with it.',
+                            'projects': {
+                                'website': {
+                                    'index.html': '<html><body><h1>Hello!</h1></body></html>'
+                                }
+                            }
+                        },
+                        'Downloads': {},
+                        'welcome.txt': 'Welcome to your home directory!\nTry `ls -a` to see hidden files.',
+                        '.bash_history': 'ls\ncd Documents\npwd'
+                    }
+                },
+                'etc': {
+                    'config.conf': '# Sample config file\nUSER=admin\nPORT=8080',
+                    'hosts': '127.0.0.1  localhost'
+                },
+                'var': {
+                    'log': {
+                        'sys.log': 'system boot complete.'
+                    }
+                }
+            };
+            let currentPath = ['home', 'user'];
+            // --- End Filesystem ---
+
+            // --- Utility Functions ---
+
+            /**
+             * Gets the object representing the current working directory.
+             */
+            function getCurrentDirectory() {
+                let current = filesystem;
+                for (const dir of currentPath) {
+                    if (current[dir] && typeof current[dir] === 'object') {
+                        current = current[dir];
+                    } else {
+                        // This should not happen if currentPath is managed correctly
+                        console.error('Filesystem path desync');
+                        currentPath = ['home', 'user'];
+                        return filesystem.home.user;
+                    }
+                }
+                return current;
+            }
+
+            /**
+             * Resolves a path string (relative or absolute) to a directory object or file content.
+             * Returns { node, parent, nodeName, error }
+             */
+            function resolvePath(path) {
+                let startNode = filesystem;
+                let pathSegments = [];
+
+                if (path.startsWith('/')) {
+                    // Absolute path
+                    pathSegments = path.split('/').filter(Boolean);
+                } else if (path.startsWith('~')) {
+                    // Home directory path
+                    pathSegments = ['home', 'user', ...path.substring(1).split('/').filter(Boolean)];
+                } else {
+                    // Relative path
+                    pathSegments = [...currentPath, ...path.split('/').filter(Boolean)];
+                }
+
+                let current = startNode;
+                let parent = null;
+                let nodeName = '';
+
+                let resolvedSegments = [];
+                for (const segment of pathSegments) {
+                    if (segment === '.') {
+                        continue;
+                    } else if (segment === '..') {
+                        if (resolvedSegments.length > 0) {
+                            resolvedSegments.pop();
+                        }
+                    } else {
+                        resolvedSegments.push(segment);
+                    }
+                }
+
+                pathSegments = resolvedSegments;
+
+                for (let i = 0; i < pathSegments.length; i++) {
+                    const segment = pathSegments[i];
+                    if (current && typeof current === 'object' && current.hasOwnProperty(segment)) {
+                        parent = current;
+                        current = current[segment];
+                        nodeName = segment;
+                    } else {
+                        return { error: `No such file or directory: ${path}` };
+                    }
+                }
+
+                return { node: current, parent: parent, nodeName: nodeName };
+            }
+
+            /**
+             * Updates the path display in the prompt.
+             */
+            function updatePromptPath() {
+                if (currentPath.length === 2 && currentPath[0] === 'home' && currentPath[1] === 'user') {
+                    promptPath.textContent = '~';
+                } else {
+                    promptPath.textContent = '/' + currentPath.join('/');
+                }
+            }
+
+            /**
+             * Scrolls the terminal output to the bottom.
+             */
+            function scrollTerminalToBottom() {
+                terminalOutput.scrollTop = terminalOutput.scrollHeight;
+            }
+
+            /**
+             * Adds a line of text to the terminal output.
+             */
+            function printToTerminal(text, isCommand = false) {
+                const div = document.createElement('div');
+                if (isCommand) {
+                    // Re-create the prompt for the executed command
+                    const promptSpan = document.createElement('span');
+                    promptSpan.className = 'text-cyan-400 mr-2 shrink-0';
+                    promptSpan.innerHTML = `<span>user@web-terminal:</span><span>${promptPath.textContent}</span>$`;
+                    div.appendChild(promptSpan);
+                    
+                    const cmdText = document.createElement('span');
+                    cmdText.textContent = text;
+                    div.appendChild(cmdText);
+                } else {
+                    // Use pre-wrap to respect newlines in output (e.g., from 'cat')
+                    div.style.whiteSpace = 'pre-wrap';
+                    div.textContent = text;
+                }
+                terminalOutput.appendChild(div);
+            }
+
+            /**
+             * Focuses the hidden input field.
+             */
+            function focusInput() {
+                terminalInput.focus();
+            }
+
+            // --- Command Implementations ---
+
+            const commands = {
+                'help': () => {
+                    printToTerminal('Available commands:');
+                    printToTerminal('  <span class="text-cyan-400">help</span>       - Show this help message');
+                    printToTerminal('  <span class="text-cyan-400">whoami</span>     - Find out what user we\'re currently logged in as!');
+                    printToTerminal('  <span class="text-cyan-400">ls [path]</span>  - (listing) List directory contents');
+                    printToTerminal('  <span class="text-cyan-400">cd [path]</span>  - (change directory) Change directory');
+                    printToTerminal('  <span class="text-cyan-400">pwd</span>        - (print working directory) Print working directory');
+                    printToTerminal('  <span class="text-cyan-400">cat [file]</span>   - (concatenate) Display file contents');
+                    printToTerminal('  <span class="text-cyan-400">echo [text]</span>  - Output any text that we provide');
+                    printToTerminal('  <span class="text-cyan-400">mkdir [name]</span> - Create a new directory');
+                    printToTerminal('  <span class="text-cyan-400">touch [name]</span> - Create a new empty file');
+                    printToTerminal('  <span class="text-cyan-400">rm [file]</span>    - Remove a file');
+                    printToTerminal('  <span class="text-cyan-400">rmdir [dir]</span>  - Remove an empty directory');
+                    printToTerminal('  <span class="text-cyan-400">ip a | grep inet</span> - Show IPv4 addresses');
+                    printToTerminal('  <span class="text-cyan-400">clear</span>      - Clear the terminal screen');
+                    // We need to use innerHTML to render the spans
+                    terminalOutput.lastChild.innerHTML = '  <span class="text-cyan-400">clear</span>      - Clear the terminal screen';
+                    terminalOutput.childNodes[terminalOutput.childNodes.length - 2].innerHTML = '  <span class="text-cyan-400">ip a | grep inet</span> - Show IPv4 addresses';
+                    terminalOutput.childNodes[terminalOutput.childNodes.length - 3].innerHTML = '  <span class="text-cyan-400">rmdir [dir]</span>  - Remove an empty directory';
+                    terminalOutput.childNodes[terminalOutput.childNodes.length - 4].innerHTML = '  <span class="text-cyan-400">rm [file]</span>    - Remove a file';
+                    terminalOutput.childNodes[terminalOutput.childNodes.length - 5].innerHTML = '  <span class="text-cyan-400">touch [name]</span> - Create a new empty file';
+                    terminalOutput.childNodes[terminalOutput.childNodes.length - 6].innerHTML = '  <span class="text-cyan-400">mkdir [name]</span> - Create a new directory';
+                    terminalOutput.childNodes[terminalOutput.childNodes.length - 7].innerHTML = '  <span class="text-cyan-400">echo [text]</span>  - Output any text that we provide';
+                    terminalOutput.childNodes[terminalOutput.childNodes.length - 9].innerHTML = '  <span class="text-cyan-400">cd [path]</span>  - (change directory) Change directory';
+                    terminalOutput.childNodes[terminalOutput.childNodes.length - 10].innerHTML = '  <span class="text-cyan-400">ls [path]</span>  - (listing) List directory contents';
+                    terminalOutput.childNodes[terminalOutput.childNodes.length - 12].innerHTML = '  <span class="text-cyan-400">whoami</span>     - Find out what user we\'re currently logged in as!';
+                    terminalOutput.childNodes[terminalOutput.childNodes.length - 13].innerHTML = '  <span class="text-cyan-400">help</span>       - Show this help message';
+
+                },
+                'whoami': () => {
+                    printToTerminal('user');
+                },
+                'ls': (args) => {
+                    const path = args[1] || '.';
+                    const showHidden = args.includes('-a');
+                    const { node, error } = resolvePath(path);
+
+                    if (error) return printToTerminal(`ls: ${error}`);
+                    if (typeof node !== 'object') return printToTerminal(`ls: Not a directory: ${path}`);
+
+                    let entries = Object.entries(node);
+                    if (!showHidden) {
+                        entries = entries.filter(([name]) => !name.startsWith('.'));
+                    }
+
+                    if (entries.length === 0) return;
+
+                    let output = '';
+                    for (const [name, content] of entries) {
+                        if (typeof content === 'object') {
+                            output += `<span class="text-blue-400">${name}</span>  `;
+                        } else {
+                            output += `<span>${name}</span>  `;
+                        }
+                    }
+                    printToTerminal(output);
+                    terminalOutput.lastChild.innerHTML = output; // Render colors
+                },
+                'cd': (args) => {
+                    const path = args[1] || '~';
+                    if (path === '~') {
+                        currentPath = ['home', 'user'];
+                        updatePromptPath();
+                        return;
+                    }
+
+                    let pathSegments;
+                    let startNode = filesystem;
+
+                    if (path.startsWith('/')) {
+                        // Absolute
+                        pathSegments = path.split('/').filter(Boolean);
+                    } else {
+                        // Relative
+                        pathSegments = [...currentPath, ...path.split('/').filter(Boolean)];
+                        startNode = filesystem;
+                    }
+
+                    let newPath = [];
+                    for (const segment of pathSegments) {
+                        if (segment === '.') {
+                            continue;
+                        } else if (segment === '..') {
+                            if (newPath.length > 0) newPath.pop();
+                        } else {
+                            newPath.push(segment);
+                        }
+                    }
+
+                    // Validate new path
+                    let current = startNode;
+                    for (const segment of newPath) {
+                        if (current && typeof current === 'object' && current.hasOwnProperty(segment) && typeof current[segment] === 'object') {
+                            current = current[segment];
+                        } else {
+                            return printToTerminal(`cd: No such directory: ${path}`);
+                        }
+                    }
+
+                    currentPath = newPath;
+                    updatePromptPath();
+                },
+                'pwd': () => {
+                    if (currentPath.length === 0) {
+                        printToTerminal('/');
+                    } else {
+                        printToTerminal('/' + currentPath.join('/'));
+                    }
+                },
+                'cat': (args) => {
+                    const path = args[1];
+                    if (!path) return printToTerminal('cat: Missing file operand');
+                    
+                    const { node, error } = resolvePath(path);
+                    if (error) return printToTerminal(`cat: ${error}`);
+                    if (typeof node === 'object') return printToTerminal(`cat: Is a directory: ${path}`);
+                    
+                    printToTerminal(node);
+                },
+                'echo': (args) => {
+                    printToTerminal(args.slice(1).join(' '));
+                },
+                'mkdir': (args) => {
+                    const dirName = args[1];
+                    if (!dirName) return printToTerminal('mkdir: Missing operand');
+                    if (dirName.includes('/')) return printToTerminal('mkdir: Cannot create nested directories yet');
+
+                    const currentDir = getCurrentDirectory();
+                    if (currentDir.hasOwnProperty(dirName)) {
+                        return printToTerminal(`mkdir: Cannot create directory '${dirName}': File exists`);
+                    }
+                    
+                    currentDir[dirName] = {};
+                },
+                'touch': (args) => {
+                    const fileName = args[1];
+                    if (!fileName) return printToTerminal('touch: Missing file operand');
+                    if (fileName.includes('/')) return printToTerminal('touch: Cannot create nested files yet');
+                    
+                    const currentDir = getCurrentDirectory();
+                    if (currentDir.hasOwnProperty(fileName) && typeof currentDir[fileName] === 'object') {
+                         return printToTerminal(`touch: Cannot touch '${fileName}': Is a directory`);
+                    }
+                    
+                    currentDir[fileName] = ''; // Create empty file or update timestamp (just set to empty string here)
+                },
+                'rm': (args) => {
+                    const path = args[1];
+                    if (!path) return printToTerminal('rm: Missing operand');
+
+                    const { node, parent, nodeName, error } = resolvePath(path);
+                    if (error) return printToTerminal(`rm: ${error}`);
+                    if (typeof node === 'object') return printToTerminal(`rm: Cannot remove '${path}': Is a directory. (Use rmdir)`);
+                    
+                    delete parent[nodeName];
+                },
+                'rmdir': (args) => {
+                    const path = args[1];
+                    if (!path) return printToTerminal('rmdir: Missing operand');
+
+                    const { node, parent, nodeName, error } = resolvePath(path);
+                    if (error) return printToTerminal(`rmdir: ${error}`);
+                    if (typeof node !== 'object') return printToTerminal(`rmdir: Failed to remove '${path}': Not a directory`);
+                    if (Object.keys(node).length > 0) return printToTerminal(`rmdir: Failed to remove '${path}': Directory not empty`);
+
+                    delete parent[nodeName];
+                },
+                'ip': (args) => {
+                    const argString = args.slice(1).join(' ');
+                    if (argString === 'a | grep inet') {
+                        // Simulate 'ip a | grep inet'
+                        printToTerminal('    inet 127.0.0.1/8 scope host lo');
+                        printToTerminal('    inet 192.168.1.10/24 brd 192.168.1.255 scope global eth0');
+                    } else if (argString === 'a') {
+                        // Simulate 'ip a'
+                        printToTerminal('1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000');
+                        printToTerminal('    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00');
+                        printToTerminal('    inet 127.0.0.1/8 scope host lo');
+                        printToTerminal('        valid_lft forever preferred_lft forever');
+                        printToTerminal('2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000');
+                        printToTerminal('    link/ether 02:42:ac:11:00:02 brd ff:ff:ff:ff:ff:ff');
+                        printToTerminal('    inet 192.168.1.10/24 brd 192.168.1.255 scope global eth0');
+                        printToTerminal('        valid_lft forever preferred_lft forever');
+                    } else {
+                        printToTerminal(`ip: invalid arguments. Try 'ip a' or 'ip a | grep inet'`);
+                    }
+                },
+                'clear': () => {
+                    terminalOutput.innerHTML = '';
+                }
+            };
+
+            // --- Event Handlers ---
+
+            /**
+             * Handles the 'Enter' key press to execute a command.
+             */
+            function handleCommandExecution() {
+                const commandText = currentInput.trim();
+                
+                // Print the command executed
+                printToTerminal(commandText, true);
+
+                if (commandText) {
+                    // Add to history
+                    if (commandHistory[commandHistory.length - 1] !== commandText) {
+                        commandHistory.push(commandText);
+                    }
+                    historyIndex = commandHistory.length; // Point after the last item
+
+                    const args = commandText.split(/\s+/); // Split by whitespace
+                    const command = args[0].toLowerCase();
+
+                    if (commands[command]) {
+                        try {
+                            commands[command](args);
+                        } catch (e) {
+                            printToTerminal(`Error: ${e.message}`);
+                            console.error(e);
+                        }
+                    } else {
+                        printToTerminal(`Command not found: ${command}`);
+                    }
+                }
+
+                // Reset input
+                currentInput = "";
+                inputDisplay.textContent = "";
+                terminalInput.value = "";
+                scrollTerminalToBottom();
+            }
+
+            /**
+             * Handles input, keydown events for history, etc.
+             */
+            terminalInput.addEventListener('input', (e) => {
+                currentInput = terminalInput.value;
+                inputDisplay.textContent = currentInput;
+            });
+
+            terminalInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleCommandExecution();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (historyIndex > 0) {
+                        historyIndex--;
+                        currentInput = commandHistory[historyIndex];
+                        terminalInput.value = currentInput;
+                        inputDisplay.textContent = currentInput;
+                        // Move cursor to end
+                        setTimeout(() => terminalInput.setSelectionRange(currentInput.length, currentInput.length), 0);
+                    }
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (historyIndex < commandHistory.length - 1) {
+                        historyIndex++;
+                        currentInput = commandHistory[historyIndex];
+                        terminalInput.value = currentInput;
+                        inputDisplay.textContent = currentInput;
+                        // Move cursor to end
+                        setTimeout(() => terminalInput.setSelectionRange(currentInput.length, currentInput.length), 0);
+                    } else {
+                        // Clear input if at end of history
+                        historyIndex = commandHistory.length;
+                        currentInput = "";
+                        terminalInput.value = "";
+                        inputDisplay.textContent = "";
+                    }
+                } else if (e.key === 'Tab') {
+                    // Basic tab completion (WIP)
+                    e.preventDefault();
+                    // This is a simple version. A real one would be more complex.
+                    const parts = currentInput.split(' ');
+                    const lastPart = parts[parts.length - 1];
+                    if (lastPart) {
+                        const currentDir = getCurrentDirectory();
+                        const entries = Object.keys(currentDir);
+                        const match = entries.find(entry => entry.startsWith(lastPart));
+                        if (match) {
+                            const completed = parts.slice(0, -1).join(' ') + (parts.length > 1 ? ' ' : '') + match;
+                            currentInput = completed;
+                            terminalInput.value = currentInput;
+                            inputDisplay.textContent = currentInput;
+                            // Move cursor to end
+                            setTimeout(() => terminalInput.setSelectionRange(currentInput.length, currentInput.length), 0);
+                        }
+                    }
+                }
+            });
+
+            // Focus the input when clicking anywhere in the terminal
+            terminalContainer.addEventListener('click', (e) => {
+                // Don't focus if selecting text
+                if (window.getSelection().toString() === '') {
+                    focusInput();
+                }
+            });
+
+            // Initial focus
+            focusInput();
+        });
+    </script>
+</body>
+</html>
+
+
+
