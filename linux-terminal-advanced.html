@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Linux Terminal — Advanced</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+        #screen, #input-display, #terminal-input {
+            font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+        #screen::-webkit-scrollbar, #missions::-webkit-scrollbar { width: 8px; }
+        #screen::-webkit-scrollbar-track, #missions::-webkit-scrollbar-track { background: #0f172a; }
+        #screen::-webkit-scrollbar-thumb, #missions::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 4px; }
+        #screen::-webkit-scrollbar-thumb:hover, #missions::-webkit-scrollbar-thumb:hover { background-color: #64748b; }
+        #cursor {
+            display: inline-block; width: 8px; height: 1.1em; background-color: #f8fafc;
+            animation: blink 1s step-end infinite; vertical-align: text-bottom;
+        }
+        @keyframes blink { from, to { background-color: transparent; } 50% { background-color: #f8fafc; } }
+        #terminal-input { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+        .mission-done { text-decoration: line-through; opacity: 0.55; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-4">
+            <h1 class="text-2xl md:text-3xl font-bold text-emerald-400">Interactive Linux Terminal — Advanced</h1>
+            <p class="text-slate-400 text-sm mt-1">
+                A simulated shell with pipes, redirection, globbing, variables, tab-completion and
+                <code class="text-cyan-400">man</code> pages. Type <code class="text-cyan-400">help</code> to get started, or work through the missions on the right.
+            </p>
+        </header>
+
+        <div class="flex flex-col lg:flex-row gap-4">
+            <!-- Terminal -->
+            <div id="terminal" class="flex-1 min-w-0 bg-black/80 rounded-lg shadow-2xl border border-slate-700 overflow-hidden flex flex-col h-[78vh]">
+                <div class="bg-slate-800 px-3 py-2.5 flex items-center justify-between border-b border-slate-700">
+                    <div class="flex space-x-2">
+                        <span class="w-3.5 h-3.5 bg-red-500 rounded-full block"></span>
+                        <span class="w-3.5 h-3.5 bg-yellow-500 rounded-full block"></span>
+                        <span class="w-3.5 h-3.5 bg-green-500 rounded-full block"></span>
+                    </div>
+                    <span class="text-sm text-slate-400">user@linuxlab: <span id="titlebar-path">~</span></span>
+                    <button id="reset-btn" class="text-xs text-slate-400 hover:text-slate-200 border border-slate-600 rounded px-2 py-0.5">reset</button>
+                </div>
+
+                <div id="screen" class="flex-1 p-4 overflow-y-auto text-sm leading-relaxed"></div>
+
+                <div class="px-4 py-3 border-t border-slate-700">
+                    <div class="flex">
+                        <span id="prompt" class="text-emerald-400 mr-2 shrink-0 whitespace-pre"></span>
+                        <div class="relative w-full">
+                            <span id="input-display" class="whitespace-pre-wrap break-all text-sm"></span><span id="cursor"></span>
+                            <input type="text" id="terminal-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Missions -->
+            <aside class="w-full lg:w-80 shrink-0 bg-slate-800 rounded-lg border border-slate-700 shadow-lg flex flex-col h-[78vh]">
+                <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+                    <h2 class="font-semibold text-slate-100">Missions</h2>
+                    <span id="mission-progress" class="text-xs text-emerald-400"></span>
+                </div>
+                <div id="missions" class="p-4 overflow-y-auto space-y-3 text-sm"></div>
+            </aside>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // ----------------------------------------------------------------- DOM
+        const screenEl   = document.getElementById('screen');
+        const inputEl    = document.getElementById('terminal-input');
+        const displayEl  = document.getElementById('input-display');
+        const promptEl   = document.getElementById('prompt');
+        const titlebar   = document.getElementById('titlebar-path');
+        const missionsEl = document.getElementById('missions');
+        const progressEl = document.getElementById('mission-progress');
+        const terminalEl = document.getElementById('terminal');
+
+        // ------------------------------------------------------------ Filesystem
+        // Node: { type:'dir'|'file', children?, content?, perms, owner, group, mtime }
+        const now = () => {
+            const d = new Date();
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const hh = String(d.getHours()).padStart(2,'0');
+            const mm = String(d.getMinutes()).padStart(2,'0');
+            return `${months[d.getMonth()]} ${String(d.getDate()).padStart(2,' ')} ${hh}:${mm}`;
+        };
+        const SEED_TIME = 'Jan 15 09:30';
+        const dir  = (children = {}, meta = {}) => ({ type:'dir',  children, perms:'rwxr-xr-x', owner:'user', group:'user', mtime:SEED_TIME, ...meta });
+        const file = (content = '', meta = {}) => ({ type:'file', content, perms:'rw-r--r--', owner:'user', group:'user', mtime:SEED_TIME, ...meta });
+
+        function buildFS() {
+            return dir({
+                home: dir({
+                    user: dir({
+                        Documents: dir({
+                            'notes.txt': file("Shopping list:\n- coffee\n- notebooks\n- USB drive\nRemember to back up the server on Friday.\n"),
+                            'todo.txt': file("[ ] Learn pipes\n[ ] Learn redirection\n[x] Learn ls\n[ ] Write a shell script\n"),
+                            'report.md': file("# Q1 Report\n\nRevenue is up 12%.\nCosts are down 3%.\nSee notes.txt for follow-ups.\n"),
+                        }),
+                        Downloads: dir({
+                            'archive.zip': file('PK... (binary data)', { perms:'rw-r--r--' }),
+                            'installer.sh': file("#!/bin/bash\necho 'Pretend installer running...'\n", { perms:'rwxr-xr-x' }),
+                        }),
+                        Pictures: dir({
+                            'vacation.jpg': file('��� JPEG image data (binary)'),
+                            'diagram.png': file('PNG image data (binary)'),
+                        }),
+                        projects: dir({
+                            website: dir({
+                                'index.html': file("<!DOCTYPE html>\n<html><body><h1>Hello, world!</h1></body></html>\n"),
+                                'style.css': file("body { font-family: sans-serif; margin: 2rem; }\nh1 { color: teal; }\n"),
+                                'script.js': file("console.log('hello from script.js');\n"),
+                            }),
+                            scripts: dir({
+                                'backup.sh': file("#!/bin/bash\n# Back up the home directory\ntar -czf backup.tgz ~/\n", { perms:'rwxr-xr-x' }),
+                                'hello.py': file("print('Hello from Python!')\n"),
+                                'cleanup.sh': file("#!/bin/bash\nrm -f /tmp/*.tmp\n"),
+                            }),
+                        }),
+                        '.bashrc': file("# ~/.bashrc\nalias ll='ls -la'\nexport EDITOR=nano\nexport PS1='\\u@\\h:\\w$ '\n"),
+                        '.profile': file("# ~/.profile\nexport PATH=$PATH:$HOME/bin\n"),
+                        'readme.txt': file("Welcome to the Linux lab!\nEverything here is simulated and safe to experiment with.\nType 'help' for a list of commands, or 'man ls' to read a manual page.\n"),
+                    }),
+                }),
+                etc: dir({
+                    passwd: file("root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:Lab User:/home/user:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\n"),
+                    hosts: file("127.0.0.1\tlocalhost\n127.0.1.1\tlinuxlab\n"),
+                    hostname: file("linuxlab\n"),
+                    'os-release': file('NAME="Lab Linux"\nVERSION="1.0 (Sandbox)"\nID=lablinux\n'),
+                }, { owner:'root', group:'root' }),
+                var: dir({
+                    log: dir({
+                        'syslog': file("Jan 15 09:00 linuxlab systemd[1]: Started Session 1.\nJan 15 09:01 linuxlab kernel: eth0 link up\nJan 15 09:05 linuxlab cron[812]: job finished\n", { owner:'root' }),
+                        'auth.log': file("Jan 15 09:00 linuxlab sshd[900]: Accepted password for user\nJan 15 09:32 linuxlab sudo: user : command=/usr/bin/apt\n", { owner:'root' }),
+                    }, { owner:'root' }),
+                }, { owner:'root', group:'root' }),
+                tmp: dir({}, { perms:'rwxrwxrwx' }),
+                usr: dir({ bin: dir({}, { owner:'root', group:'root' }) }, { owner:'root', group:'root' }),
+            }, { owner:'root', group:'root' });
+        }
+
+        // ----------------------------------------------------------- Shell state
+        let fsRoot, cwd, env, history, historyIndex, missionState;
+
+        function resetSession(printBanner = true) {
+            fsRoot = buildFS();
+            cwd = ['home', 'user'];
+            env = { USER:'user', HOME:'/home/user', HOSTNAME:'linuxlab', SHELL:'/bin/bash',
+                    PATH:'/usr/local/bin:/usr/bin:/bin', PWD:'/home/user', EDITOR:'nano', LANG:'en_US.UTF-8' };
+            history = [];
+            historyIndex = 0;
+            missionState = { pwd:false, lsAll:false, catNotes:false, mkdir:false, redirect:false,
+                             pipe:false, grep:false, find:false, chmodX:false, manPage:false };
+            screenEl.innerHTML = '';
+            if (printBanner) {
+                printLine("Lab Linux 1.0 (Sandbox)  —  simulated terminal", 'text-emerald-400');
+                printLine("Type 'help' for commands, 'man <cmd>' for a manual page, or 'missions' to see your goals.", 'text-slate-400');
+                printLine('');
+            }
+            renderMissions();
+            updatePrompt();
+        }
+
+        // ------------------------------------------------------------ FS helpers
+        function segmentsToPath(segs) { return '/' + segs.join('/'); }
+
+        function displayPath(segs) {
+            const p = segmentsToPath(segs);
+            if (p === '/home/user') return '~';
+            if (p.startsWith('/home/user/')) return '~' + p.slice('/home/user'.length);
+            return p;
+        }
+
+        function resolveSegments(path) {
+            let segs;
+            if (path === undefined || path === '') return cwd.slice();
+            if (path.startsWith('/'))       segs = path.split('/').filter(Boolean);
+            else if (path.startsWith('~'))  segs = ['home','user', ...path.slice(1).split('/').filter(Boolean)];
+            else                            segs = [...cwd, ...path.split('/').filter(Boolean)];
+            const out = [];
+            for (const s of segs) {
+                if (s === '.' || s === '') continue;
+                else if (s === '..') { if (out.length) out.pop(); }
+                else out.push(s);
+            }
+            return out;
+        }
+
+        function getNode(path) {
+            const segs = resolveSegments(path);
+            let node = fsRoot;
+            for (const s of segs) {
+                if (node.type === 'dir' && node.children[s]) node = node.children[s];
+                else return null;
+            }
+            return node;
+        }
+
+        function getParentAndName(path) {
+            const segs = resolveSegments(path);
+            if (segs.length === 0) return { parent:null, name:'', segs };
+            const name = segs[segs.length - 1];
+            let node = fsRoot;
+            for (let i = 0; i < segs.length - 1; i++) {
+                if (node.type === 'dir' && node.children[segs[i]]) node = node.children[segs[i]];
+                else return { parent:null, name, segs };
+            }
+            return { parent: node, name, segs };
+        }
+
+        // ------------------------------------------------------------- Tokenizer
+        // Produces tokens: {text, sq(single-quoted), dq(double-quoted)} or {op:'|'|'>'|'>>'|'<'|'2>'}
+        function tokenize(line) {
+            const tokens = [];
+            let i = 0, cur = '', has = false, sq = false, dq = false;
+            const flush = () => { if (has) { tokens.push({ text: cur, sq, dq }); cur=''; has=false; sq=false; dq=false; } };
+            while (i < line.length) {
+                const c = line[i];
+                if (c === "'") { has = true; sq = true; i++; while (i < line.length && line[i] !== "'") cur += line[i++]; i++; continue; }
+                if (c === '"') { has = true; dq = true; i++; while (i < line.length && line[i] !== '"') cur += line[i++]; i++; continue; }
+                if (c === ' ' || c === '\t') { flush(); i++; continue; }
+                if (c === '|') { flush(); tokens.push({ op:'|' }); i++; continue; }
+                if (c === '<') { flush(); tokens.push({ op:'<' }); i++; continue; }
+                if (c === '>') { flush(); if (line[i+1] === '>') { tokens.push({ op:'>>' }); i+=2; } else { tokens.push({ op:'>' }); i++; } continue; }
+                if (c === '2' && line[i+1] === '>' && !has) { flush(); tokens.push({ op:'2>' }); i+=2; continue; }
+                cur += c; has = true; i++;
+            }
+            flush();
+            return tokens;
+        }
+
+        function expandToken(tok) {
+            if (tok.sq) return [tok.text];                 // single quotes: literal
+            let s = tok.text;
+            s = s.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, n) => env[n] ?? '');
+            s = s.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g,      (_, n) => env[n] ?? '');
+            if (!tok.dq && /[*?]/.test(s)) {
+                const matches = glob(s);
+                if (matches.length) return matches;
+            }
+            return [s];
+        }
+
+        function glob(pattern) {
+            const slash = pattern.lastIndexOf('/');
+            const dirPart = slash >= 0 ? pattern.slice(0, slash) || '/' : '.';
+            const base    = slash >= 0 ? pattern.slice(slash + 1) : pattern;
+            const node = getNode(dirPart);
+            if (!node || node.type !== 'dir') return [];
+            const re = new RegExp('^' + base.split('').map(ch =>
+                ch === '*' ? '.*' : ch === '?' ? '.' : ch.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+            ).join('') + '$');
+            const hits = Object.keys(node.children)
+                .filter(name => (base.startsWith('.') || !name.startsWith('.')) && re.test(name))
+                .sort()
+                .map(name => slash >= 0 ? `${pattern.slice(0, slash)}/${name}` : name);
+            return hits;
+        }
+
+        // ---------------------------------------------------------------- Output
+        function escapeHTML(s) {
+            return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+        }
+        function printLine(text = '', cls = '') {
+            const div = document.createElement('div');
+            div.style.whiteSpace = 'pre-wrap';
+            div.style.wordBreak = 'break-word';
+            if (cls) div.className = cls;
+            div.textContent = text;               // textContent → safe, no HTML injection
+            screenEl.appendChild(div);
+        }
+        function printCommandEcho(raw) {
+            const div = document.createElement('div');
+            const p = document.createElement('span');
+            p.className = 'text-emerald-400';
+            p.textContent = promptString() + ' ';
+            const c = document.createElement('span');
+            c.className = 'text-slate-100';
+            c.textContent = raw;
+            div.append(p, c);
+            screenEl.appendChild(div);
+        }
+        function scrollBottom() { screenEl.scrollTop = screenEl.scrollHeight; }
+
+        function promptString() { return `user@linuxlab:${displayPath(cwd)}$`; }
+        function updatePrompt() {
+            promptEl.textContent = promptString();
+            titlebar.textContent = displayPath(cwd);
+            env.PWD = segmentsToPath(cwd);
+        }
+
+        // -------------------------------------------------------------- Commands
+        // Each command: (args, stdin) => { out, err, code }
+        // args excludes the command name. out/err are strings (no trailing newline required).
+        const ok  = (out = '')  => ({ out, err:'', code:0 });
+        const bad = (err, code = 1) => ({ out:'', err, code });
+
+        function splitFlags(args) {
+            const flags = new Set(); const rest = [];
+            for (const a of args) {
+                if (a.length > 1 && a[0] === '-' && a[1] !== '-' && !/^-\d/.test(a)) {
+                    for (const ch of a.slice(1)) flags.add(ch);
+                } else if (a.startsWith('--')) {
+                    flags.add(a);
+                } else rest.push(a);
+            }
+            return { flags, rest };
+        }
+
+        function permString(node) { return (node.type === 'dir' ? 'd' : '-') + node.perms; }
+        function nodeSize(node) { return node.type === 'dir' ? 4096 : node.content.length; }
+        function isExec(node) { return node.type === 'file' && node.perms.includes('x'); }
+
+        const commands = {
+            help() {
+                const groups = [
+                    ['Navigation', ['pwd','ls','cd','tree']],
+                    ['Reading',    ['cat','less','head','tail','wc','file','stat']],
+                    ['Editing',    ['touch','mkdir','rm','rmdir','cp','mv','echo','chmod']],
+                    ['Searching',  ['grep','find','sort','uniq']],
+                    ['System',     ['whoami','id','uname','hostname','date','ps','df','du','env','export','which','history']],
+                    ['Shell',      ['man','clear','missions','help','reset']],
+                ];
+                let out = 'Available commands (try "man <command>" for details):\n';
+                for (const [label, cmds] of groups) {
+                    out += `\n  ${label}:\n    ${cmds.join('  ')}\n`;
+                }
+                out += '\nOperators:  |  (pipe)   >  >>  (redirect out)   <  (redirect in)   *  ?  (globs)   $VAR  (variables)';
+                return ok(out);
+            },
+            missions() { renderMissions(); return ok('Missions are listed in the panel on the right. Complete them by running the right commands!'); },
+            clear() { screenEl.innerHTML = ''; return ok(); },
+            reset() { resetSession(false); return ok('Session reset. Filesystem restored to its original state.'); },
+
+            pwd() { missionState.pwd = true; checkMissions(); return ok(segmentsToPath(cwd)); },
+
+            whoami() { return ok('user'); },
+            id() { return ok('uid=1000(user) gid=1000(user) groups=1000(user),27(sudo)'); },
+            hostname() { return ok('linuxlab'); },
+            uname(args) {
+                const { flags } = splitFlags(args);
+                if (flags.has('a')) return ok('Linux linuxlab 6.1.0-lab #1 SMP x86_64 GNU/Linux');
+                return ok('Linux');
+            },
+            date() { return ok(new Date().toString()); },
+            env() { return ok(Object.entries(env).map(([k,v]) => `${k}=${v}`).join('\n')); },
+            printenv(args) {
+                if (args.length) return ok(args.map(k => env[k] ?? '').join('\n'));
+                return commands.env([]);
+            },
+            export(args) {
+                for (const a of args) {
+                    const eq = a.indexOf('=');
+                    if (eq > 0) env[a.slice(0, eq)] = a.slice(eq + 1);
+                }
+                return ok();
+            },
+            which(args) {
+                if (!args.length) return ok();
+                const known = new Set(Object.keys(commands));
+                const lines = args.map(a => known.has(a) ? `/usr/bin/${a}` : '');
+                const missing = args.some(a => !known.has(a));
+                return { out: lines.filter(Boolean).join('\n'), err:'', code: missing ? 1 : 0 };
+            },
+            history() {
+                return ok(history.map((h, i) => `${String(i + 1).padStart(4,' ')}  ${h}`).join('\n'));
+            },
+
+            echo(args) {
+                let interpret = false; const parts = [...args];
+                if (parts[0] === '-e') { interpret = true; parts.shift(); }
+                let s = parts.join(' ');
+                if (interpret) s = s.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+                return ok(s);
+            },
+
+            ls(args) {
+                const { flags, rest } = splitFlags(args);
+                const long = flags.has('l');
+                const all  = flags.has('a');
+                if (all) { missionState.lsAll = true; checkMissions(); }
+                const targets = rest.length ? rest : ['.'];
+
+                const fmtEntry = (name, n) => {
+                    const suffix = n.type === 'dir' ? '/' : (isExec(n) ? '*' : '');
+                    if (long) return `${permString(n)} 1 ${n.owner.padEnd(5)} ${n.group.padEnd(5)} ${String(nodeSize(n)).padStart(6)} ${n.mtime} ${name}${suffix}`;
+                    return name + suffix;
+                };
+
+                // Split targets into plain files (listed together) and directories.
+                const fileEntries = [];
+                const dirTargets = [];
+                let anyErr = '';
+                for (const t of targets) {
+                    const node = getNode(t);
+                    if (!node) { anyErr += `ls: cannot access '${t}': No such file or directory\n`; continue; }
+                    if (node.type === 'file') fileEntries.push([t, node]);
+                    else dirTargets.push([t, node]);
+                }
+
+                const blocks = [];
+                const showHeaders = (fileEntries.length + dirTargets.length) > 1;
+
+                if (fileEntries.length) {
+                    fileEntries.sort((a, b) => a[0].localeCompare(b[0]));
+                    blocks.push(fileEntries.map(([name, n]) => fmtEntry(name, n)).join(long ? '\n' : '  '));
+                }
+
+                for (const [t, node] of dirTargets) {
+                    let entries = Object.entries(node.children);
+                    if (all) entries = [['.', node], ['..', node], ...entries];
+                    entries = entries.filter(([name]) => all || !name.startsWith('.'));
+                    entries.sort((a, b) => a[0].replace(/^\./, '').localeCompare(b[0].replace(/^\./, '')));
+
+                    let block = '';
+                    if (showHeaders) block += `${t}:\n`;
+                    if (long) {
+                        const total = entries.reduce((s, [, n]) => s + Math.ceil(nodeSize(n) / 1024), 0);
+                        block += `total ${total}\n`;
+                        block += entries.map(([name, n]) => fmtEntry(name, n)).join('\n');
+                    } else {
+                        block += entries.map(([name, n]) => fmtEntry(name, n)).join('  ');
+                    }
+                    blocks.push(block);
+                }
+                return { out: blocks.join('\n\n'), err: anyErr.trim(), code: anyErr ? 1 : 0 };
+            },
+
+            cd(args) {
+                const target = args[0] || '~';
+                const node = getNode(target);
+                if (!node) return bad(`cd: ${target}: No such file or directory`);
+                if (node.type !== 'dir') return bad(`cd: ${target}: Not a directory`);
+                cwd = resolveSegments(target);
+                updatePrompt();
+                return ok();
+            },
+
+            tree(args) {
+                const start = args[0] || '.';
+                const root = getNode(start);
+                if (!root) return bad(`tree: ${start}: No such file or directory`);
+                if (root.type !== 'dir') return ok(start);
+                let dirs = 0, files = 0;
+                const lines = [displayPath(resolveSegments(start))];
+                (function walk(node, prefix) {
+                    const entries = Object.entries(node.children)
+                        .filter(([n]) => !n.startsWith('.'))
+                        .sort((a, b) => a[0].localeCompare(b[0]));
+                    entries.forEach(([name, child], idx) => {
+                        const last = idx === entries.length - 1;
+                        lines.push(prefix + (last ? '└── ' : '├── ') + name + (child.type === 'dir' ? '/' : ''));
+                        if (child.type === 'dir') { dirs++; walk(child, prefix + (last ? '    ' : '│   ')); }
+                        else files++;
+                    });
+                })(root, '');
+                lines.push('', `${dirs} directories, ${files} files`);
+                return ok(lines.join('\n'));
+            },
+
+            cat(args, stdin) {
+                if (!args.length) return ok(stdin || '');
+                let out = '', err = '';
+                for (const a of args) {
+                    const node = getNode(a);
+                    if (!node) { err += `cat: ${a}: No such file or directory\n`; continue; }
+                    if (node.type === 'dir') { err += `cat: ${a}: Is a directory\n`; continue; }
+                    if (a.includes('notes.txt')) { missionState.catNotes = true; }
+                    out += node.content;
+                }
+                checkMissions();
+                return { out: out.replace(/\n$/, ''), err: err.trim(), code: err ? 1 : 0 };
+            },
+            less(args, stdin) { return commands.cat(args, stdin); },
+            more(args, stdin) { return commands.cat(args, stdin); },
+
+            head(args, stdin) {
+                let n = 10; const files = [];
+                for (let i = 0; i < args.length; i++) {
+                    if (args[i] === '-n') n = parseInt(args[++i], 10) || 10;
+                    else if (/^-\d+$/.test(args[i])) n = parseInt(args[i].slice(1), 10);
+                    else files.push(args[i]);
+                }
+                const take = (text) => text.split('\n').slice(0, n).join('\n');
+                if (!files.length) return ok(take(stdin || ''));
+                const node = getNode(files[0]);
+                if (!node || node.type === 'dir') return bad(`head: cannot open '${files[0]}'`);
+                return ok(take(node.content.replace(/\n$/, '')));
+            },
+            tail(args, stdin) {
+                let n = 10; const files = [];
+                for (let i = 0; i < args.length; i++) {
+                    if (args[i] === '-n') n = parseInt(args[++i], 10) || 10;
+                    else if (/^-\d+$/.test(args[i])) n = parseInt(args[i].slice(1), 10);
+                    else files.push(args[i]);
+                }
+                const take = (text) => { const l = text.split('\n'); return l.slice(Math.max(0, l.length - n)).join('\n'); };
+                if (!files.length) return ok(take(stdin || ''));
+                const node = getNode(files[0]);
+                if (!node || node.type === 'dir') return bad(`tail: cannot open '${files[0]}'`);
+                return ok(take(node.content.replace(/\n$/, '')));
+            },
+
+            wc(args, stdin) {
+                const { flags, rest } = splitFlags(args);
+                const only = flags.has('l') || flags.has('w') || flags.has('c');
+                const fmt = (text, label) => {
+                    const lines = text === '' ? 0 : text.split('\n').length - (text.endsWith('\n') ? 1 : 0) + (text.endsWith('\n') ? 0 : (text ? 0 : 0));
+                    const lc = text ? text.replace(/\n$/, '').split('\n').length : 0;
+                    const wc = text.trim() ? text.trim().split(/\s+/).length : 0;
+                    const cc = text.length;
+                    let cols = [];
+                    if (!only || flags.has('l')) cols.push(String(lc).padStart(4));
+                    if (!only || flags.has('w')) cols.push(String(wc).padStart(4));
+                    if (!only || flags.has('c')) cols.push(String(cc).padStart(4));
+                    return cols.join(' ') + (label ? ' ' + label : '');
+                };
+                if (!rest.length) return ok(fmt(stdin || '', ''));
+                const out = [];
+                let err = '';
+                for (const f of rest) {
+                    const node = getNode(f);
+                    if (!node || node.type === 'dir') { err += `wc: ${f}: No such file\n`; continue; }
+                    out.push(fmt(node.content, f));
+                }
+                return { out: out.join('\n'), err: err.trim(), code: err ? 1 : 0 };
+            },
+
+            grep(args, stdin) {
+                const { flags, rest } = splitFlags(args);
+                if (!rest.length) return bad('usage: grep [-ivnc] PATTERN [FILE...]');
+                const pattern = rest[0];
+                const files = rest.slice(1);
+                const ic = flags.has('i'), inv = flags.has('v'), num = flags.has('n'), count = flags.has('c');
+                const re = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), ic ? 'i' : '');
+                missionState.grep = true; checkMissions();
+
+                const search = (text, prefix) => {
+                    const lines = text.replace(/\n$/, '').split('\n');
+                    const hits = [];
+                    lines.forEach((line, i) => {
+                        const match = re.test(line);
+                        if (match !== inv) {
+                            let out = '';
+                            if (prefix) out += prefix + ':';
+                            if (num) out += (i + 1) + ':';
+                            out += line;
+                            hits.push(out);
+                        }
+                    });
+                    return hits;
+                };
+
+                if (!files.length) {
+                    const hits = search(stdin || '', '');
+                    return ok(count ? String(hits.length) : hits.join('\n'));
+                }
+                let out = [], err = '';
+                const multi = files.length > 1;
+                for (const f of files) {
+                    const node = getNode(f);
+                    if (!node || node.type === 'dir') { err += `grep: ${f}: No such file or directory\n`; continue; }
+                    const hits = search(node.content, multi ? f : '');
+                    if (count) out.push(`${multi ? f + ':' : ''}${hits.length}`);
+                    else out.push(...hits);
+                }
+                return { out: out.join('\n'), err: err.trim(), code: out.length ? 0 : 1 };
+            },
+
+            find(args) {
+                const start = (args[0] && !args[0].startsWith('-')) ? args[0] : '.';
+                let namePat = null, typeFilter = null;
+                for (let i = 0; i < args.length; i++) {
+                    if (args[i] === '-name') namePat = args[++i];
+                    else if (args[i] === '-type') typeFilter = args[++i];
+                }
+                const root = getNode(start);
+                if (!root) return bad(`find: '${start}': No such file or directory`);
+                missionState.find = true; checkMissions();
+                const results = [];
+                const re = namePat ? new RegExp('^' + namePat.split('').map(c =>
+                    c === '*' ? '.*' : c === '?' ? '.' : c.replace(/[.+^${}()|[\]\\]/g, '\\$&')).join('') + '$') : null;
+                (function walk(node, path) {
+                    const matchType = !typeFilter || (typeFilter === 'd' && node.type === 'dir') || (typeFilter === 'f' && node.type === 'file');
+                    const base = path.split('/').filter(Boolean).pop() || '.';
+                    if (matchType && (!re || re.test(base))) results.push(path);
+                    if (node.type === 'dir') {
+                        for (const [name, child] of Object.entries(node.children).sort((a,b)=>a[0].localeCompare(b[0]))) {
+                            const childPath = path === '.' ? './' + name : (path === '/' ? '/' + name : path + '/' + name);
+                            walk(child, childPath);
+                        }
+                    }
+                })(root, start);
+                return ok(results.join('\n'));
+            },
+
+            sort(args, stdin) {
+                const { flags, rest } = splitFlags(args);
+                let text = stdin || '';
+                if (rest.length) {
+                    const node = getNode(rest[0]);
+                    if (!node || node.type === 'dir') return bad(`sort: cannot read: ${rest[0]}`);
+                    text = node.content;
+                }
+                let lines = text.replace(/\n$/, '').split('\n');
+                if (flags.has('n')) lines.sort((a, b) => parseFloat(a) - parseFloat(b));
+                else lines.sort();
+                if (flags.has('r')) lines.reverse();
+                if (flags.has('u')) lines = [...new Set(lines)];
+                return ok(lines.join('\n'));
+            },
+            uniq(args, stdin) {
+                const { flags, rest } = splitFlags(args);
+                let text = stdin || '';
+                if (rest.length) {
+                    const node = getNode(rest[0]);
+                    if (!node || node.type === 'dir') return bad(`uniq: ${rest[0]}: No such file`);
+                    text = node.content;
+                }
+                const lines = text.replace(/\n$/, '').split('\n');
+                const out = []; let prev = null, cnt = 0;
+                const flush = () => { if (prev !== null) out.push(flags.has('c') ? `${String(cnt).padStart(7)} ${prev}` : prev); };
+                for (const l of lines) {
+                    if (l === prev) cnt++;
+                    else { flush(); prev = l; cnt = 1; }
+                }
+                flush();
+                return ok(out.join('\n'));
+            },
+
+            touch(args) {
+                if (!args.length) return bad('touch: missing file operand');
+                for (const a of args) {
+                    const { parent, name } = getParentAndName(a);
+                    if (!parent || parent.type !== 'dir') return bad(`touch: cannot touch '${a}': No such file or directory`);
+                    if (parent.children[name]) parent.children[name].mtime = now();
+                    else parent.children[name] = file('', { mtime: now() });
+                }
+                return ok();
+            },
+            mkdir(args) {
+                const { flags, rest } = splitFlags(args);
+                if (!rest.length) return bad('mkdir: missing operand');
+                for (const a of rest) {
+                    if (flags.has('p')) {
+                        const segs = resolveSegments(a);
+                        let node = fsRoot;
+                        for (const s of segs) {
+                            if (!node.children[s]) node.children[s] = dir({}, { mtime: now() });
+                            node = node.children[s];
+                            if (node.type !== 'dir') return bad(`mkdir: cannot create directory '${a}': Not a directory`);
+                        }
+                    } else {
+                        const { parent, name } = getParentAndName(a);
+                        if (!parent || parent.type !== 'dir') return bad(`mkdir: cannot create directory '${a}': No such file or directory`);
+                        if (parent.children[name]) return bad(`mkdir: cannot create directory '${a}': File exists`);
+                        parent.children[name] = dir({}, { mtime: now() });
+                    }
+                }
+                missionState.mkdir = true; checkMissions();
+                return ok();
+            },
+            rmdir(args) {
+                if (!args.length) return bad('rmdir: missing operand');
+                for (const a of args) {
+                    const { parent, name } = getParentAndName(a);
+                    const node = parent && parent.children[name];
+                    if (!node) return bad(`rmdir: failed to remove '${a}': No such file or directory`);
+                    if (node.type !== 'dir') return bad(`rmdir: failed to remove '${a}': Not a directory`);
+                    if (Object.keys(node.children).length) return bad(`rmdir: failed to remove '${a}': Directory not empty`);
+                    delete parent.children[name];
+                }
+                return ok();
+            },
+            rm(args) {
+                const { flags, rest } = splitFlags(args);
+                const recursive = flags.has('r') || flags.has('R');
+                const force = flags.has('f');
+                if (!rest.length) return force ? ok() : bad('rm: missing operand');
+                let err = '';
+                for (const a of rest) {
+                    const { parent, name } = getParentAndName(a);
+                    const node = parent && parent.children[name];
+                    if (!node) { if (!force) err += `rm: cannot remove '${a}': No such file or directory\n`; continue; }
+                    if (node.type === 'dir' && !recursive) { err += `rm: cannot remove '${a}': Is a directory\n`; continue; }
+                    delete parent.children[name];
+                }
+                return { out:'', err: err.trim(), code: err ? 1 : 0 };
+            },
+            cp(args) {
+                const { flags, rest } = splitFlags(args);
+                if (rest.length < 2) return bad('cp: missing destination file operand');
+                const recursive = flags.has('r') || flags.has('R');
+                const srcs = rest.slice(0, -1);
+                const dest = rest[rest.length - 1];
+                const destNode = getNode(dest);
+                const clone = (n) => JSON.parse(JSON.stringify(n));
+                for (const src of srcs) {
+                    const s = getNode(src);
+                    if (!s) return bad(`cp: cannot stat '${src}': No such file or directory`);
+                    if (s.type === 'dir' && !recursive) return bad(`cp: -r not specified; omitting directory '${src}'`);
+                    const copy = clone(s); copy.mtime = now();
+                    if (destNode && destNode.type === 'dir') {
+                        destNode.children[src.split('/').filter(Boolean).pop()] = copy;
+                    } else {
+                        const { parent, name } = getParentAndName(dest);
+                        if (!parent) return bad(`cp: cannot create '${dest}': No such file or directory`);
+                        parent.children[name] = copy;
+                    }
+                }
+                return ok();
+            },
+            mv(args) {
+                if (args.length < 2) return bad('mv: missing destination file operand');
+                const srcs = args.slice(0, -1);
+                const dest = args[args.length - 1];
+                const destNode = getNode(dest);
+                for (const src of srcs) {
+                    const { parent: sp, name: sn } = getParentAndName(src);
+                    const node = sp && sp.children[sn];
+                    if (!node) return bad(`mv: cannot stat '${src}': No such file or directory`);
+                    let dp, dn;
+                    if (destNode && destNode.type === 'dir') { dp = destNode; dn = sn; }
+                    else {
+                        const pn = getParentAndName(dest);
+                        dp = pn.parent; dn = pn.name;
+                        if (!dp) return bad(`mv: cannot move to '${dest}': No such file or directory`);
+                    }
+                    // Moving onto itself (e.g. `mv notes.txt .`) is a harmless no-op.
+                    if (dp === sp && dn === sn) continue;
+                    dp.children[dn] = node;
+                    delete sp.children[sn];
+                }
+                return ok();
+            },
+
+            chmod(args) {
+                if (args.length < 2) return bad('chmod: missing operand');
+                const mode = args[0];
+                let err = '';
+                for (const target of args.slice(1)) {
+                    const node = getNode(target);
+                    if (!node) { err += `chmod: cannot access '${target}': No such file or directory\n`; continue; }
+                    if (/^[0-7]{3}$/.test(mode)) {
+                        const map = ['---','--x','-w-','-wx','r--','r-x','rw-','rwx'];
+                        node.perms = mode.split('').map(d => map[+d]).join('');
+                    } else if (/^[ugoa]*[+-][rwx]+$/.test(mode)) {
+                        const add = mode.includes('+');
+                        const sep = mode.search(/[+-]/);
+                        let classes = mode.slice(0, sep);
+                        if (classes === '' || classes.includes('a')) classes = 'ugo';
+                        const permChars = mode.slice(sep + 1);
+                        const classBase = { u:0, g:3, o:6 };
+                        const permOffset = { r:0, w:1, x:2 };
+                        const perms = node.perms.split('');
+                        for (const cl of classes) {
+                            const base = classBase[cl];
+                            if (base === undefined) continue;
+                            for (const pc of permChars) perms[base + permOffset[pc]] = add ? pc : '-';
+                        }
+                        node.perms = perms.join('');
+                    } else return bad(`chmod: invalid mode: '${mode}'`);
+                    if (mode.includes('x') && mode.includes('+')) missionState.chmodX = true;
+                    if (/^[0-7]{3}$/.test(mode) && (+mode[0] & 1)) missionState.chmodX = true;
+                }
+                checkMissions();
+                return { out:'', err: err.trim(), code: err ? 1 : 0 };
+            },
+
+            file(args) {
+                if (!args.length) return bad('file: missing operand');
+                const out = args.map(a => {
+                    const node = getNode(a);
+                    if (!node) return `${a}: cannot open (No such file or directory)`;
+                    if (node.type === 'dir') return `${a}: directory`;
+                    if (/\.(jpg|jpeg|png|gif)$/.test(a)) return `${a}: image data`;
+                    if (/\.zip$/.test(a)) return `${a}: Zip archive data`;
+                    if (node.content.startsWith('#!')) return `${a}: script text executable`;
+                    return `${a}: ASCII text`;
+                });
+                return ok(out.join('\n'));
+            },
+            stat(args) {
+                if (!args.length) return bad('stat: missing operand');
+                const node = getNode(args[0]);
+                if (!node) return bad(`stat: cannot stat '${args[0]}': No such file or directory`);
+                const octal = node.perms.split('').reduce((acc, ch, i) => {
+                    const bit = ch !== '-' ? (ch === 'r' ? 4 : ch === 'w' ? 2 : 1) : 0;
+                    return acc + bit * Math.pow(10, Math.floor((8 - i) / 3)) * 0 + bit; }, 0);
+                return ok(
+`  File: ${args[0]}
+  Size: ${nodeSize(node)}\tBlocks: ${Math.ceil(nodeSize(node)/512)}\t${node.type === 'dir' ? 'directory' : 'regular file'}
+Access: (${node.perms})  Uid: (1000/${node.owner})  Gid: (1000/${node.group})
+Modify: ${node.mtime}`);
+            },
+
+            ps() {
+                return ok(
+`  PID TTY          TIME CMD
+  812 pts/0    00:00:00 bash
+  940 pts/0    00:00:01 node
+ 1015 pts/0    00:00:00 ps`);
+            },
+            df() {
+                return ok(
+`Filesystem     1K-blocks     Used Available Use% Mounted on
+/dev/sda1       41152000 12894720  26154496  34% /
+tmpfs            2048000        0   2048000   0% /tmp`);
+            },
+            du(args) {
+                const start = args.find(a => !a.startsWith('-')) || '.';
+                const node = getNode(start);
+                if (!node) return bad(`du: cannot access '${start}': No such file or directory`);
+                const lines = [];
+                (function walk(n, path) {
+                    let total = 0;
+                    if (n.type === 'dir') {
+                        for (const [name, child] of Object.entries(n.children)) {
+                            total += walk(child, path + '/' + name);
+                        }
+                        lines.push(`${Math.max(4, Math.ceil(total/1024))}\t${path}`);
+                        return total + 4096;
+                    }
+                    return nodeSize(n);
+                })(node, start);
+                return ok(lines.join('\n'));
+            },
+
+            man(args) {
+                if (!args.length) return bad('What manual page do you want?');
+                const page = MAN[args[0]];
+                missionState.manPage = true; checkMissions();
+                if (!page) return bad(`No manual entry for ${args[0]}`);
+                return ok(page);
+            },
+            sudo(args) {
+                if (!args.length) return bad('usage: sudo <command>');
+                const sub = args[0];
+                if (!commands[sub]) return bad(`sudo: ${sub}: command not found`);
+                return commands[sub](args.slice(1), '');
+            },
+        };
+        // aliases
+        commands.dir = commands.ls;
+        commands.ll  = (a, s) => commands.ls(['-l', ...a], s);
+
+        // ------------------------------------------------------------- Man pages
+        const MAN = {
+            ls:   "NAME\n    ls - list directory contents\n\nSYNOPSIS\n    ls [-a] [-l] [FILE...]\n\nDESCRIPTION\n    List information about files (the current directory by default).\n\n    -a   do not ignore entries starting with .\n    -l   use a long listing format (permissions, owner, size, date)",
+            cd:   "NAME\n    cd - change the working directory\n\nSYNOPSIS\n    cd [DIR]\n\nDESCRIPTION\n    Change the current directory to DIR. With no argument, change to the\n    home directory (~). Use '..' for the parent and '/' for the root.",
+            pwd:  "NAME\n    pwd - print name of current/working directory\n\nSYNOPSIS\n    pwd",
+            cat:  "NAME\n    cat - concatenate files and print on standard output\n\nSYNOPSIS\n    cat [FILE...]\n\nDESCRIPTION\n    Print the contents of each FILE. With no FILE, read standard input,\n    which makes cat useful at the end of a pipe.",
+            grep: "NAME\n    grep - print lines matching a pattern\n\nSYNOPSIS\n    grep [-i] [-v] [-n] [-c] PATTERN [FILE...]\n\nDESCRIPTION\n    Search each FILE (or standard input) for PATTERN.\n\n    -i   ignore case\n    -v   invert match (show non-matching lines)\n    -n   prefix each line with its line number\n    -c   print only a count of matching lines",
+            find: "NAME\n    find - search for files in a directory hierarchy\n\nSYNOPSIS\n    find [PATH] [-name PATTERN] [-type f|d]\n\nDESCRIPTION\n    Recursively descend PATH looking for files.\n\n    -name PATTERN   match the file name (supports * and ?)\n    -type f|d       restrict to files (f) or directories (d)",
+            echo: "NAME\n    echo - display a line of text\n\nSYNOPSIS\n    echo [-e] [STRING...]\n\nDESCRIPTION\n    Write arguments to standard output. Combine with > to write a file:\n        echo \"hello\" > greeting.txt\n\n    -e   interpret backslash escapes such as \\n and \\t",
+            chmod:"NAME\n    chmod - change file mode bits\n\nSYNOPSIS\n    chmod MODE FILE...\n\nDESCRIPTION\n    Change permissions. MODE can be symbolic or octal:\n        chmod +x script.sh     make executable\n        chmod 644 file.txt      rw-r--r--\n        chmod 755 script.sh     rwxr-xr-x",
+            mkdir:"NAME\n    mkdir - make directories\n\nSYNOPSIS\n    mkdir [-p] DIRECTORY...\n\nDESCRIPTION\n    Create directories.\n\n    -p   create parent directories as needed, no error if existing",
+            rm:   "NAME\n    rm - remove files or directories\n\nSYNOPSIS\n    rm [-r] [-f] FILE...\n\nDESCRIPTION\n    Remove files. Be careful: on a real system this is permanent!\n\n    -r   remove directories and their contents recursively\n    -f   ignore nonexistent files, never prompt",
+            cp:   "NAME\n    cp - copy files and directories\n\nSYNOPSIS\n    cp [-r] SOURCE... DEST\n\n    -r   copy directories recursively",
+            mv:   "NAME\n    mv - move (rename) files\n\nSYNOPSIS\n    mv SOURCE... DEST\n\nDESCRIPTION\n    Rename SOURCE to DEST, or move SOURCE(s) into a directory DEST.",
+            wc:   "NAME\n    wc - print newline, word, and byte counts\n\nSYNOPSIS\n    wc [-l] [-w] [-c] [FILE...]\n\n    -l   lines    -w   words    -c   bytes",
+            sort: "NAME\n    sort - sort lines of text\n\nSYNOPSIS\n    sort [-r] [-n] [-u] [FILE]\n\n    -r   reverse    -n   numeric    -u   unique",
+            uniq: "NAME\n    uniq - report or omit repeated adjacent lines\n\nSYNOPSIS\n    uniq [-c] [FILE]\n\n    -c   prefix lines by the number of occurrences\n\n    Tip: pipe through 'sort' first, since uniq only looks at adjacent lines.",
+            head: "NAME\n    head - output the first part of files\n\nSYNOPSIS\n    head [-n N] [FILE]\n\n    -n N   print the first N lines (default 10)",
+            tail: "NAME\n    tail - output the last part of files\n\nSYNOPSIS\n    tail [-n N] [FILE]\n\n    -n N   print the last N lines (default 10)",
+            man:  "NAME\n    man - an interface to the system reference manuals\n\nSYNOPSIS\n    man COMMAND\n\nDESCRIPTION\n    Display the manual page for COMMAND. You're reading one right now!",
+            tree: "NAME\n    tree - list contents of directories in a tree-like format\n\nSYNOPSIS\n    tree [DIR]",
+            export:"NAME\n    export - set an environment variable\n\nSYNOPSIS\n    export NAME=VALUE\n\nDESCRIPTION\n    Define a variable available to the shell. Read it back with $NAME:\n        export GREETING=hello\n        echo $GREETING",
+        };
+
+        // -------------------------------------------------------------- Executor
+        function writeToFile(path, content, append) {
+            const { parent, name } = getParentAndName(path);
+            if (!parent || parent.type !== 'dir') return `bash: ${path}: No such file or directory`;
+            if (parent.children[name] && parent.children[name].type === 'dir') return `bash: ${path}: Is a directory`;
+            if (append && parent.children[name]) parent.children[name].content += content;
+            else parent.children[name] = file(content, { mtime: now() });
+            missionState.redirect = true; checkMissions();
+            return null;
+        }
+        function readFromFile(path) {
+            const node = getNode(path);
+            if (!node) return { err: `bash: ${path}: No such file or directory` };
+            if (node.type === 'dir') return { err: `bash: ${path}: Is a directory` };
+            return { content: node.content };
+        }
+
+        function runLine(raw) {
+            const tokens = tokenize(raw);
+            if (!tokens.length) return;
+
+            // Split into pipeline segments
+            const segments = [[]];
+            for (const t of tokens) {
+                if (t.op === '|') segments.push([]);
+                else segments[segments.length - 1].push(t);
+            }
+            if (segments.length > 1) { missionState.pipe = true; }
+
+            let stdin = '';
+            for (let s = 0; s < segments.length; s++) {
+                const seg = segments[s];
+                // Extract redirections
+                let redirOut = null, redirAppend = false, redirIn = null, redirErr = null;
+                const argTokens = [];
+                for (let i = 0; i < seg.length; i++) {
+                    const t = seg[i];
+                    if (t.op === '>' || t.op === '>>') { const nx = seg[++i]; redirOut = nx ? expandToken(nx)[0] : null; redirAppend = t.op === '>>'; }
+                    else if (t.op === '<')  { const nx = seg[++i]; redirIn  = nx ? expandToken(nx)[0] : null; }
+                    else if (t.op === '2>') { const nx = seg[++i]; redirErr = nx ? expandToken(nx)[0] : null; }
+                    else argTokens.push(t);
+                }
+
+                // Expand args
+                const argv = [];
+                for (const t of argTokens) argv.push(...expandToken(t));
+                if (!argv.length) { stdin = ''; continue; }
+
+                const cmdName = argv[0];
+                const cmdArgs = argv.slice(1);
+
+                // Input redirection overrides piped stdin
+                if (redirIn !== null) {
+                    const r = readFromFile(redirIn);
+                    if (r.err) { printLine(r.err, 'text-red-400'); stdin = ''; continue; }
+                    stdin = r.content;
+                }
+
+                let result;
+                if (commands[cmdName]) {
+                    try { result = commands[cmdName](cmdArgs, stdin); }
+                    catch (e) { result = bad(`${cmdName}: ${e.message}`); }
+                } else if (cmdName.includes('=')) {
+                    // bare VAR=value assignment
+                    const eq = cmdName.indexOf('=');
+                    env[cmdName.slice(0, eq)] = cmdName.slice(eq + 1);
+                    result = ok();
+                } else {
+                    result = bad(`${cmdName}: command not found`, 127);
+                }
+
+                // stderr always shown on terminal
+                if (result.err) {
+                    if (redirErr !== null) writeToFile(redirErr, result.err + '\n', false);
+                    else printLine(result.err, 'text-red-400');
+                }
+
+                // stdout: to file, to next stage, or to terminal
+                const out = result.out || '';
+                if (redirOut !== null) {
+                    const werr = writeToFile(redirOut, out === '' ? '' : out.replace(/\n?$/, '\n'), redirAppend);
+                    if (werr) printLine(werr, 'text-red-400');
+                    stdin = '';
+                } else if (s < segments.length - 1) {
+                    stdin = out;
+                } else if (out !== '') {
+                    printLine(out);
+                }
+            }
+            checkMissions();
+        }
+
+        // -------------------------------------------------------------- Missions
+        const MISSIONS = [
+            { key:'pwd',      text:'Print your current working directory.',                       hint:'pwd' },
+            { key:'lsAll',    text:'List all files, including hidden ones.',                       hint:'ls -a' },
+            { key:'catNotes', text:'Read the contents of Documents/notes.txt.',                   hint:'cat ~/Documents/notes.txt' },
+            { key:'manPage',  text:'Open a manual page for any command.',                          hint:'man grep' },
+            { key:'mkdir',    text:'Create a new directory.',                                      hint:'mkdir sandbox' },
+            { key:'redirect', text:'Write text to a new file using redirection.',                 hint:'echo "hi" > hello.txt' },
+            { key:'grep',     text:'Search for text inside a file with grep.',                    hint:'grep coffee ~/Documents/notes.txt' },
+            { key:'pipe',     text:'Chain two commands together with a pipe.',                    hint:'cat ~/Documents/todo.txt | wc -l' },
+            { key:'find',     text:'Find a file somewhere in the filesystem.',                    hint:"find / -name '*.sh'" },
+            { key:'chmodX',   text:'Make a file executable with chmod.',                          hint:'chmod +x hello.py' },
+        ];
+        function renderMissions() {
+            missionsEl.innerHTML = '';
+            let done = 0;
+            for (const m of MISSIONS) {
+                const complete = !!missionState[m.key];
+                if (complete) done++;
+                const wrap = document.createElement('div');
+                wrap.className = 'flex items-start gap-2';
+                const box = document.createElement('span');
+                box.className = complete ? 'text-emerald-400 shrink-0' : 'text-slate-500 shrink-0';
+                box.textContent = complete ? '✓' : '○';
+                const body = document.createElement('div');
+                const t = document.createElement('div');
+                t.className = complete ? 'mission-done text-slate-200' : 'text-slate-200';
+                t.textContent = m.text;
+                const h = document.createElement('div');
+                h.className = 'text-xs text-slate-500 mt-0.5';
+                h.textContent = 'try: ' + m.hint;
+                body.append(t, h);
+                wrap.append(box, body);
+                missionsEl.appendChild(wrap);
+            }
+            progressEl.textContent = `${done}/${MISSIONS.length}`;
+            if (done === MISSIONS.length) {
+                const banner = document.createElement('div');
+                banner.className = 'mt-2 p-2 rounded bg-emerald-900/40 border border-emerald-700 text-emerald-300 text-center font-medium';
+                banner.textContent = '🎉 All missions complete!';
+                missionsEl.appendChild(banner);
+            }
+        }
+        let lastDone = 0;
+        function checkMissions() {
+            const done = MISSIONS.filter(m => missionState[m.key]).length;
+            renderMissions();
+            if (done > lastDone) { /* could add a sound/flash here */ }
+            lastDone = done;
+        }
+
+        // -------------------------------------------------------- Tab completion
+        function completeInput() {
+            const value = inputEl.value;
+            const parts = value.split(' ');
+            const last = parts[parts.length - 1];
+
+            if (parts.length === 1) {
+                const matches = Object.keys(commands).filter(c => c.startsWith(last)).sort();
+                if (matches.length === 1) { setInput(matches[0] + ' '); }
+                else if (matches.length > 1) { printCommandEcho(value); printLine(matches.join('  ')); }
+                return;
+            }
+            // path completion on the last token
+            const slash = last.lastIndexOf('/');
+            const dirPart = slash >= 0 ? last.slice(0, slash + 1) : '';
+            const frag = slash >= 0 ? last.slice(slash + 1) : last;
+            const lookup = dirPart === '' ? '.' : dirPart;
+            const node = getNode(lookup);
+            if (!node || node.type !== 'dir') return;
+            const matches = Object.keys(node.children)
+                .filter(n => n.startsWith(frag) && (frag.startsWith('.') || !n.startsWith('.')))
+                .sort();
+            if (matches.length === 1) {
+                const child = node.children[matches[0]];
+                const completed = dirPart + matches[0] + (child.type === 'dir' ? '/' : ' ');
+                parts[parts.length - 1] = completed;
+                setInput(parts.join(' '));
+            } else if (matches.length > 1) {
+                printCommandEcho(value);
+                printLine(matches.map(m => m + (node.children[m].type === 'dir' ? '/' : '')).join('  '));
+            }
+        }
+
+        // ------------------------------------------------------------- I/O wiring
+        function setInput(val) {
+            inputEl.value = val;
+            displayEl.textContent = val;
+            setTimeout(() => inputEl.setSelectionRange(val.length, val.length), 0);
+        }
+        function focusInput() { inputEl.focus(); }
+
+        inputEl.addEventListener('input', () => { displayEl.textContent = inputEl.value; });
+
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const raw = inputEl.value;
+                printCommandEcho(raw);
+                const trimmed = raw.trim();
+                if (trimmed) {
+                    if (history[history.length - 1] !== trimmed) history.push(trimmed);
+                    historyIndex = history.length;
+                    try { runLine(trimmed); } catch (err) { printLine('Error: ' + err.message, 'text-red-400'); }
+                }
+                setInput('');
+                scrollBottom();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (historyIndex > 0) { historyIndex--; setInput(history[historyIndex]); }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex < history.length - 1) { historyIndex++; setInput(history[historyIndex]); }
+                else { historyIndex = history.length; setInput(''); }
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+                completeInput();
+                scrollBottom();
+            } else if (e.key === 'l' && e.ctrlKey) {
+                e.preventDefault();
+                screenEl.innerHTML = '';
+            } else if (e.key === 'c' && e.ctrlKey) {
+                e.preventDefault();
+                printCommandEcho(inputEl.value + '^C');
+                setInput('');
+            }
+        });
+
+        terminalEl.addEventListener('click', () => { if (window.getSelection().toString() === '') focusInput(); });
+        document.getElementById('reset-btn').addEventListener('click', () => { resetSession(true); focusInput(); });
+
+        // ------------------------------------------------------------------ Boot
+        resetSession(true);
+        focusInput();
+    });
+    </script>
+</body>
+</html>

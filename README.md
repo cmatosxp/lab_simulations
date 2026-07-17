@@ -9,7 +9,8 @@ everything is simulated in JavaScript, so you can experiment safely.
 
 | File | What it teaches |
 | --- | --- |
-| [`linux-terminal-beginners.html`](linux-terminal-beginners.html) | A simulated Linux shell with a mock filesystem. Practice `ls`, `cd`, `pwd`, `cat`, `echo`, `mkdir`, `touch`, `rm`, `rmdir`, and more, plus a reference table of common shell operators (`&`, `&&`, `>`, `>>`). |
+| [`linux-terminal-beginners.html`](linux-terminal-beginners.html) | A simulated Linux shell with a mock filesystem. Practice `ls`, `cd`, `pwd`, `cat`, `echo`, `mkdir`, `touch`, `rm`, `rmdir`, and more, plus a reference table of common shell operators (`&`, `&&`, `>`, `>>`). A gentle starting point. |
+| [`linux-terminal-advanced.html`](linux-terminal-advanced.html) | A far more complete shell: **pipes** (`\|`), **redirection** (`>`, `>>`, `<`), **globbing** (`*`, `?`), **environment variables** (`$VAR`), tab-completion, command history, and 30+ commands (`grep`, `find`, `wc`, `sort`, `uniq`, `head`, `tail`, `cp`, `mv`, `chmod`, `tree`, `stat`, `du`, `df`, `ps`, …) with real `man` pages. Includes a guided 10-mission checklist that tracks your progress. |
 | [`wireshark-beginners-interactive-lab.html`](wireshark-beginners-interactive-lab.html) | A guided Wireshark simulator with a pre-recorded packet capture. Learn to start/stop a capture and write display filters (`http`, `tls`, `ip.addr == ...`, combined filters). |
 | [`tcpdump-lab-simulator.html`](tcpdump-lab-simulator.html) | A command-driven `tcpdump` simulator. Run live captures, filter for TCP, write and read `.pcap` files (with a simulated TCP three-way handshake), and try `nmap`/`wireshark` follow-ups. |
 | [`pentest-beginners-interactive-lab.html`](pentest-beginners-interactive-lab.html) | A step-by-step guided penetration-test walkthrough against a simulated target: recon with `nmap`, vulnerability research with `searchsploit`, exploitation with Metasploit, and writing up a report. |
@@ -32,9 +33,15 @@ loaded from the Tailwind CSS CDN.
 
 ## How to Use Them
 
-- **Linux terminal:** type `help` to list the available commands, then explore the
-  mock filesystem. Command history works with the up/down arrow keys, and `Tab`
-  offers basic name completion.
+- **Linux terminal (beginners):** type `help` to list the available commands, then
+  explore the mock filesystem. Command history works with the up/down arrow keys,
+  and `Tab` offers basic name completion.
+- **Linux terminal (advanced):** type `help` for the full command list or
+  `man <command>` to read a manual page. Try combining commands with pipes and
+  redirection — e.g. `grep coffee ~/Documents/notes.txt`,
+  `cat ~/Documents/todo.txt | wc -l`, or `echo "hi" > hello.txt`. Work through the
+  Missions panel on the right to learn the core skills step by step, and use the
+  **reset** button to restore the filesystem at any time.
 - **Wireshark lab:** follow the numbered steps in the left sidebar. Each step
   unlocks the next once you complete its task (starting a capture, applying a
   filter, and so on).
