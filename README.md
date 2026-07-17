@@ -1,68 +1,47 @@
-# Lab Simulations
+# Interactive Cybersecurity Lab Simulations
 
-A small collection of self-contained, browser-based labs for learning the basics
-of the Linux command line and network security tooling. Each lab is a single HTML
-file with no build step, no dependencies to install, and no real systems involved —
-everything is simulated in JavaScript, so you can experiment safely.
+Safe, browser-based practice labs for Linux, packet analysis, packet capture, and an authorized penetration-testing workflow. Every command and packet stays inside the page: the labs do not scan hosts, capture network traffic, or run real exploits.
 
-## The Labs
+## Launch a Lab
 
-| File | What it teaches |
-| --- | --- |
-| [`linux-terminal-beginners.html`](linux-terminal-beginners.html) | A simulated Linux shell with a mock filesystem. Practice `ls`, `cd`, `pwd`, `cat`, `echo`, `mkdir`, `touch`, `rm`, `rmdir`, and more, plus a reference table of common shell operators (`&`, `&&`, `>`, `>>`). A gentle starting point. |
-| [`linux-terminal-advanced.html`](linux-terminal-advanced.html) | A far more complete shell: **pipes** (`\|`), **redirection** (`>`, `>>`, `<`), **globbing** (`*`, `?`), **environment variables** (`$VAR`), tab-completion, command history, and 30+ commands (`grep`, `find`, `wc`, `sort`, `uniq`, `head`, `tail`, `cp`, `mv`, `chmod`, `tree`, `stat`, `du`, `df`, `ps`, …) with real `man` pages. Includes a guided 10-mission checklist that tracks your progress. |
-| [`wireshark-beginners-interactive-lab.html`](wireshark-beginners-interactive-lab.html) | A guided Wireshark simulator with a pre-recorded packet capture. Learn to start/stop a capture and write display filters (`http`, `tls`, `ip.addr == ...`, combined filters). |
-| [`tcpdump-lab-simulator.html`](tcpdump-lab-simulator.html) | A command-driven `tcpdump` simulator. Run live captures, filter for TCP, write and read `.pcap` files (with a simulated TCP three-way handshake), and try `nmap`/`wireshark` follow-ups. |
-| [`pentest-beginners-interactive-lab.html`](pentest-beginners-interactive-lab.html) | A step-by-step guided penetration-test walkthrough against a simulated target: recon with `nmap`, vulnerability research with `searchsploit`, exploitation with Metasploit, and writing up a report. |
+| Level | Live simulation | What you will practice | Source |
+| --- | --- | --- | --- |
+| Beginner | [Linux Foundations Lab](https://cmatosxp.github.io/lab_simulations/linux-terminal-beginners.html) | Navigate a mock filesystem, manage files and directories, search text, chain commands, pipe output, and use redirection across eight missions. | [`linux-terminal-beginners.html`](linux-terminal-beginners.html) |
+| Intermediate | [Advanced Linux Terminal](https://cmatosxp.github.io/lab_simulations/linux-terminal-advanced.html) | Use 30+ simulated commands, manual pages, globbing, variables, pipes, redirection, exit status, conditional lists, permissions, and an 11-mission checklist. | [`linux-terminal-advanced.html`](linux-terminal-advanced.html) |
+| Beginner | [Wireshark Analysis Lab](https://cmatosxp.github.io/lab_simulations/wireshark-beginners-interactive-lab.html) | Work a guided packet-investigation case, select evidence frames, inspect protocol details and bytes, and build Wireshark display filters. | [`wireshark-beginners-interactive-lab.html`](wireshark-beginners-interactive-lab.html) |
+| Intermediate | [tcpdump Capture Lab](https://cmatosxp.github.io/lab_simulations/tcpdump-lab-simulator.html) | Inspect interfaces, run bounded captures, apply BPF capture filters, write/read an in-memory PCAP, and isolate TCP SYN packets across seven objectives. | [`tcpdump-lab-simulator.html`](tcpdump-lab-simulator.html) |
+| Beginner | [Authorized Pentest Lab](https://cmatosxp.github.io/lab_simulations/pentest-beginners-interactive-lab.html) | Follow scope, discover and enumerate a training host, research a version-specific exposure, validate impact, collect evidence, clean up, and write a finding. | [`pentest-beginners-interactive-lab.html`](pentest-beginners-interactive-lab.html) |
 
-## Running the Labs
+## Recommended Learning Path
 
-No server or installation is required. Either:
+1. Start with **Linux Foundations** and complete all eight missions.
+2. Move to the **Advanced Linux Terminal** for pipelines, permissions, search tools, conditional execution, and exit status.
+3. Use the **Wireshark Analysis Lab** to learn display filters and packet inspection.
+4. Use the **tcpdump Capture Lab** to learn capture filters and PCAP workflows from the command line.
+5. Finish with the **Authorized Pentest Lab**, which combines scope control, methodology, evidence, cleanup, and reporting.
 
-- **Open directly:** double-click any `.html` file, or drag it into your browser.
-- **Serve locally** (optional, avoids some browser file-access quirks):
+## Using the Labs
 
-  ```bash
-  # From the repository root
-  python3 -m http.server 8000
-  # then visit http://localhost:8000 and pick a lab
-  ```
+- Follow the mission or objective panel; it updates only after the required action succeeds.
+- Type `help` in a terminal lab to see its supported command set.
+- Use Up/Down for command history. Linux labs also support Tab completion; terminal labs support Ctrl+L to clear.
+- Use each lab's reset control to restore its original state. Supported labs save progress in browser storage between reloads.
+- Packet and security data are deterministic training scenarios, so findings are reproducible.
 
-An internet connection is needed the first time you open a lab, because styling is
-loaded from the Tailwind CSS CDN.
+## Run Locally
 
-## How to Use Them
+There is no build step. Clone or download the repository, then either open an HTML file directly or serve the directory:
 
-- **Linux terminal (beginners):** type `help` to list the available commands, then
-  explore the mock filesystem. Command history works with the up/down arrow keys,
-  and `Tab` offers basic name completion.
-- **Linux terminal (advanced):** type `help` for the full command list or
-  `man <command>` to read a manual page. Try combining commands with pipes and
-  redirection — e.g. `grep coffee ~/Documents/notes.txt`,
-  `cat ~/Documents/todo.txt | wc -l`, or `echo "hi" > hello.txt`. Work through the
-  Missions panel on the right to learn the core skills step by step, and use the
-  **reset** button to restore the filesystem at any time.
-- **Wireshark lab:** follow the numbered steps in the left sidebar. Each step
-  unlocks the next once you complete its task (starting a capture, applying a
-  filter, and so on).
-- **tcpdump simulator:** type `help` to see the supported commands. Use the
-  **STOP CAPTURE** button or type `stop` to end a live capture.
-- **Pentest lab:** each step tells you exactly which command to type. Type it into
-  the terminal to reveal the simulated output and unlock the **Next Step** button.
-  `help` and `clear` are available at any point.
+```bash
+python3 -m http.server 8000
+```
 
-## A Note on Safety and Scope
+Open `http://localhost:8000/` and select a file. The Linux, Wireshark, and tcpdump labs load Tailwind CSS from its CDN for styling, so they need internet access for their full appearance. The pentest lab is fully self-contained.
 
-These labs are **simulations built for education**. No real network traffic is
-captured, no real hosts are scanned, and no real exploits are run — every command
-returns hard-coded or randomly generated sample output. The penetration-testing
-lab in particular is meant to teach the *methodology* (recon → research →
-exploitation → reporting) in a safe sandbox. Only ever run real security tools
-against systems you own or have explicit written permission to test.
+## Safety and Scope
+
+These are closed educational simulations. They generate no real packets and make no tool-driven network requests. Only use real administration, capture, scanning, or exploitation tools on systems you own or have explicit written authorization to test.
 
 ## Contributing
 
-The labs are intentionally dependency-free single files, which makes them easy to
-tweak: open a file, edit the embedded `<script>`, and reload the page to see your
-change. Ideas for improvements — more commands, additional lab steps, clearer
-explanations — are welcome.
+Each simulation is a single HTML file with embedded JavaScript. Keep command behavior, interface guidance, and README examples aligned; test both successful and failing paths before proposing a change.

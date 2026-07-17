@@ -27,11 +27,20 @@
 
     <div class="max-w-7xl mx-auto">
         <header class="mb-4">
+            <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                <div>
+            <p class="text-xs font-semibold uppercase tracking-widest text-cyan-400">Linux learning range</p>
             <h1 class="text-2xl md:text-3xl font-bold text-emerald-400">Interactive Linux Terminal — Advanced</h1>
             <p class="text-slate-400 text-sm mt-1">
                 A simulated shell with pipes, redirection, globbing, variables, tab-completion and
                 <code class="text-cyan-400">man</code> pages. Type <code class="text-cyan-400">help</code> to get started, or work through the missions on the right.
             </p>
+                </div>
+                <div class="flex gap-2 text-xs shrink-0">
+                    <span class="px-3 py-1 rounded-full border border-emerald-700 bg-emerald-950/40 text-emerald-300">Local simulation</span>
+                    <a href="https://github.com/cmatosxp/lab_simulations#readme" class="px-3 py-1 rounded-full border border-slate-600 text-slate-300 hover:border-cyan-500 hover:text-cyan-300">All labs</a>
+                </div>
+            </div>
         </header>
 
         <div class="flex flex-col lg:flex-row gap-4">
@@ -44,17 +53,17 @@
                         <span class="w-3.5 h-3.5 bg-green-500 rounded-full block"></span>
                     </div>
                     <span class="text-sm text-slate-400">user@linuxlab: <span id="titlebar-path">~</span></span>
-                    <button id="reset-btn" class="text-xs text-slate-400 hover:text-slate-200 border border-slate-600 rounded px-2 py-0.5">reset</button>
+                    <button id="reset-btn" type="button" class="text-xs text-slate-400 hover:text-slate-200 border border-slate-600 rounded px-2 py-0.5">reset</button>
                 </div>
 
-                <div id="screen" class="flex-1 p-4 overflow-y-auto text-sm leading-relaxed"></div>
+                <div id="screen" class="flex-1 p-4 overflow-y-auto text-sm leading-relaxed" role="log" aria-live="polite" aria-label="Terminal output"></div>
 
                 <div class="px-4 py-3 border-t border-slate-700">
                     <div class="flex">
                         <span id="prompt" class="text-emerald-400 mr-2 shrink-0 whitespace-pre"></span>
                         <div class="relative w-full">
                             <span id="input-display" class="whitespace-pre-wrap break-all text-sm"></span><span id="cursor"></span>
-                            <input type="text" id="terminal-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                            <input type="text" id="terminal-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Terminal command">
                         </div>
                     </div>
                 </div>
@@ -82,6 +91,7 @@
         const missionsEl = document.getElementById('missions');
         const progressEl = document.getElementById('mission-progress');
         const terminalEl = document.getElementById('terminal');
+        const STORAGE_KEY = 'linux-advanced-lab-v2';
 
         // ------------------------------------------------------------ Filesystem
         // Node: { type:'dir'|'file', children?, content?, perms, owner, group, mtime }
@@ -154,11 +164,11 @@
             fsRoot = buildFS();
             cwd = ['home', 'user'];
             env = { USER:'user', HOME:'/home/user', HOSTNAME:'linuxlab', SHELL:'/bin/bash',
-                    PATH:'/usr/local/bin:/usr/bin:/bin', PWD:'/home/user', EDITOR:'nano', LANG:'en_US.UTF-8' };
+                    PATH:'/usr/local/bin:/usr/bin:/bin', PWD:'/home/user', EDITOR:'nano', LANG:'en_US.UTF-8', '?':'0' };
             history = [];
             historyIndex = 0;
             missionState = { pwd:false, lsAll:false, catNotes:false, mkdir:false, redirect:false,
-                             pipe:false, grep:false, find:false, chmodX:false, manPage:false };
+                             pipe:false, chain:false, grep:false, find:false, chmodX:false, manPage:false };
             screenEl.innerHTML = '';
             if (printBanner) {
                 printLine("Lab Linux 1.0 (Sandbox)  —  simulated terminal", 'text-emerald-400');
@@ -167,6 +177,34 @@
             }
             renderMissions();
             updatePrompt();
+        }
+
+        function saveSession() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ fsRoot, cwd, env, history, missionState }));
+        }
+
+        function restoreSession() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+                if (!saved || !saved.fsRoot) return false;
+                fsRoot = saved.fsRoot;
+                cwd = Array.isArray(saved.cwd) ? saved.cwd : ['home', 'user'];
+                env = { ...saved.env, '?': saved.env?.['?'] ?? '0' };
+                history = Array.isArray(saved.history) ? saved.history : [];
+                historyIndex = history.length;
+                missionState = { pwd:false, lsAll:false, catNotes:false, mkdir:false, redirect:false,
+                                 pipe:false, chain:false, grep:false, find:false, chmodX:false, manPage:false,
+                                 ...(saved.missionState || {}) };
+                screenEl.innerHTML = '';
+                printLine('Saved advanced shell session restored.', 'text-emerald-400');
+                printLine("Type 'missions' to review progress or 'reset' to start over.", 'text-slate-400');
+                printLine('');
+                renderMissions();
+                updatePrompt();
+                return true;
+            } catch (_) {
+                return false;
+            }
         }
 
         // ------------------------------------------------------------ FS helpers
@@ -217,7 +255,7 @@
         }
 
         // ------------------------------------------------------------- Tokenizer
-        // Produces tokens: {text, sq(single-quoted), dq(double-quoted)} or {op:'|'|'>'|'>>'|'<'|'2>'}
+        // Produces word tokens or shell operator tokens.
         function tokenize(line) {
             const tokens = [];
             let i = 0, cur = '', has = false, sq = false, dq = false;
@@ -227,7 +265,9 @@
                 if (c === "'") { has = true; sq = true; i++; while (i < line.length && line[i] !== "'") cur += line[i++]; i++; continue; }
                 if (c === '"') { has = true; dq = true; i++; while (i < line.length && line[i] !== '"') cur += line[i++]; i++; continue; }
                 if (c === ' ' || c === '\t') { flush(); i++; continue; }
-                if (c === '|') { flush(); tokens.push({ op:'|' }); i++; continue; }
+                if (c === '&' && line[i+1] === '&') { flush(); tokens.push({ op:'&&' }); i+=2; continue; }
+                if (c === '|') { flush(); if (line[i+1] === '|') { tokens.push({ op:'||' }); i+=2; } else { tokens.push({ op:'|' }); i++; } continue; }
+                if (c === ';') { flush(); tokens.push({ op:';' }); i++; continue; }
                 if (c === '<') { flush(); tokens.push({ op:'<' }); i++; continue; }
                 if (c === '>') { flush(); if (line[i+1] === '>') { tokens.push({ op:'>>' }); i+=2; } else { tokens.push({ op:'>' }); i++; } continue; }
                 if (c === '2' && line[i+1] === '>' && !has) { flush(); tokens.push({ op:'2>' }); i+=2; continue; }
@@ -240,6 +280,7 @@
         function expandToken(tok) {
             if (tok.sq) return [tok.text];                 // single quotes: literal
             let s = tok.text;
+            s = s.replace(/\$\?/g, env['?'] ?? '0');
             s = s.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, n) => env[n] ?? '');
             s = s.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g,      (_, n) => env[n] ?? '');
             if (!tok.dq && /[*?]/.test(s)) {
@@ -333,12 +374,12 @@
                 for (const [label, cmds] of groups) {
                     out += `\n  ${label}:\n    ${cmds.join('  ')}\n`;
                 }
-                out += '\nOperators:  |  (pipe)   >  >>  (redirect out)   <  (redirect in)   *  ?  (globs)   $VAR  (variables)';
+                out += '\nOperators:  | (pipe)   > >> < (redirection)   ; && || (lists)   * ? (globs)   $VAR $? (variables/status)';
                 return ok(out);
             },
             missions() { renderMissions(); return ok('Missions are listed in the panel on the right. Complete them by running the right commands!'); },
             clear() { screenEl.innerHTML = ''; return ok(); },
-            reset() { resetSession(false); return ok('Session reset. Filesystem restored to its original state.'); },
+            reset() { localStorage.removeItem(STORAGE_KEY); resetSession(false); return ok('Session reset. Filesystem restored to its original state.'); },
 
             pwd() { missionState.pwd = true; checkMissions(); return ok(segmentsToPath(cwd)); },
 
@@ -373,6 +414,8 @@
             history() {
                 return ok(history.map((h, i) => `${String(i + 1).padStart(4,' ')}  ${h}`).join('\n'));
             },
+            true() { return ok(); },
+            false() { return bad('', 1); },
 
             echo(args) {
                 let interpret = false; const parts = [...args];
@@ -893,78 +936,119 @@ tmpfs            2048000        0   2048000   0% /tmp`);
             return { content: node.content };
         }
 
-        function runLine(raw) {
-            const tokens = tokenize(raw);
-            if (!tokens.length) return;
-
-            // Split into pipeline segments
+        function runPipelineTokens(tokens) {
             const segments = [[]];
-            for (const t of tokens) {
-                if (t.op === '|') segments.push([]);
-                else segments[segments.length - 1].push(t);
+            for (const token of tokens) {
+                if (token.op === '|') segments.push([]);
+                else segments[segments.length - 1].push(token);
             }
-            if (segments.length > 1) { missionState.pipe = true; }
+            if (segments.some(segment => segment.length === 0)) {
+                printLine("bash: syntax error near unexpected token `|'", 'text-red-400');
+                return 2;
+            }
+            if (segments.length > 1) missionState.pipe = true;
 
             let stdin = '';
-            for (let s = 0; s < segments.length; s++) {
-                const seg = segments[s];
-                // Extract redirections
+            let exitCode = 0;
+            for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex++) {
+                const segment = segments[segmentIndex];
                 let redirOut = null, redirAppend = false, redirIn = null, redirErr = null;
                 const argTokens = [];
-                for (let i = 0; i < seg.length; i++) {
-                    const t = seg[i];
-                    if (t.op === '>' || t.op === '>>') { const nx = seg[++i]; redirOut = nx ? expandToken(nx)[0] : null; redirAppend = t.op === '>>'; }
-                    else if (t.op === '<')  { const nx = seg[++i]; redirIn  = nx ? expandToken(nx)[0] : null; }
-                    else if (t.op === '2>') { const nx = seg[++i]; redirErr = nx ? expandToken(nx)[0] : null; }
-                    else argTokens.push(t);
+                for (let index = 0; index < segment.length; index++) {
+                    const token = segment[index];
+                    if (token.op === '>' || token.op === '>>') {
+                        const next = segment[++index];
+                        redirOut = next ? expandToken(next)[0] : null;
+                        redirAppend = token.op === '>>';
+                        if (!next) { printLine('bash: syntax error near unexpected token `newline`', 'text-red-400'); return 2; }
+                    } else if (token.op === '<') {
+                        const next = segment[++index];
+                        redirIn = next ? expandToken(next)[0] : null;
+                        if (!next) { printLine('bash: syntax error near unexpected token `newline`', 'text-red-400'); return 2; }
+                    } else if (token.op === '2>') {
+                        const next = segment[++index];
+                        redirErr = next ? expandToken(next)[0] : null;
+                        if (!next) { printLine('bash: syntax error near unexpected token `newline`', 'text-red-400'); return 2; }
+                    } else {
+                        argTokens.push(token);
+                    }
                 }
 
-                // Expand args
                 const argv = [];
-                for (const t of argTokens) argv.push(...expandToken(t));
-                if (!argv.length) { stdin = ''; continue; }
-
+                for (const token of argTokens) argv.push(...expandToken(token));
+                if (!argv.length) continue;
                 const cmdName = argv[0];
                 const cmdArgs = argv.slice(1);
 
-                // Input redirection overrides piped stdin
                 if (redirIn !== null) {
-                    const r = readFromFile(redirIn);
-                    if (r.err) { printLine(r.err, 'text-red-400'); stdin = ''; continue; }
-                    stdin = r.content;
+                    const inputResult = readFromFile(redirIn);
+                    if (inputResult.err) { printLine(inputResult.err, 'text-red-400'); return 1; }
+                    stdin = inputResult.content;
                 }
 
                 let result;
                 if (commands[cmdName]) {
                     try { result = commands[cmdName](cmdArgs, stdin); }
-                    catch (e) { result = bad(`${cmdName}: ${e.message}`); }
+                    catch (error) { result = bad(`${cmdName}: ${error.message}`); }
                 } else if (cmdName.includes('=')) {
-                    // bare VAR=value assignment
-                    const eq = cmdName.indexOf('=');
-                    env[cmdName.slice(0, eq)] = cmdName.slice(eq + 1);
+                    const equals = cmdName.indexOf('=');
+                    env[cmdName.slice(0, equals)] = cmdName.slice(equals + 1);
                     result = ok();
                 } else {
                     result = bad(`${cmdName}: command not found`, 127);
                 }
+                exitCode = result.code;
 
-                // stderr always shown on terminal
                 if (result.err) {
                     if (redirErr !== null) writeToFile(redirErr, result.err + '\n', false);
                     else printLine(result.err, 'text-red-400');
                 }
 
-                // stdout: to file, to next stage, or to terminal
-                const out = result.out || '';
+                const output = result.out || '';
                 if (redirOut !== null) {
-                    const werr = writeToFile(redirOut, out === '' ? '' : out.replace(/\n?$/, '\n'), redirAppend);
-                    if (werr) printLine(werr, 'text-red-400');
+                    const writeError = writeToFile(redirOut, output === '' ? '' : output.replace(/\n?$/, '\n'), redirAppend);
+                    if (writeError) { printLine(writeError, 'text-red-400'); exitCode = 1; }
                     stdin = '';
-                } else if (s < segments.length - 1) {
-                    stdin = out;
-                } else if (out !== '') {
-                    printLine(out);
+                } else if (segmentIndex < segments.length - 1) {
+                    stdin = output;
+                } else if (output !== '') {
+                    printLine(output);
                 }
             }
+            return exitCode;
+        }
+
+        function runLine(raw) {
+            const tokens = tokenize(raw);
+            if (!tokens.length) return;
+            const lists = [[]];
+            const controls = [];
+            for (const token of tokens) {
+                if (token.op === '&&' || token.op === '||' || token.op === ';') {
+                    controls.push(token.op);
+                    lists.push([]);
+                } else {
+                    lists[lists.length - 1].push(token);
+                }
+            }
+            if (lists.some(list => list.length === 0)) {
+                printLine('bash: syntax error near unexpected control operator', 'text-red-400');
+                env['?'] = '2';
+                return;
+            }
+            if (controls.length) missionState.chain = true;
+
+            let exitCode = 0;
+            for (let index = 0; index < lists.length; index++) {
+                const previous = controls[index - 1];
+                if (index > 0 && previous === '&&' && exitCode !== 0) continue;
+                if (index > 0 && previous === '||' && exitCode === 0) continue;
+                exitCode = runPipelineTokens(lists[index]);
+                // Bash expands $? when each command list executes, so later
+                // commands on the same line see the immediately preceding status.
+                env['?'] = String(exitCode);
+            }
+            env['?'] = String(exitCode);
             checkMissions();
         }
 
@@ -978,8 +1062,9 @@ tmpfs            2048000        0   2048000   0% /tmp`);
             { key:'redirect', text:'Write text to a new file using redirection.',                 hint:'echo "hi" > hello.txt' },
             { key:'grep',     text:'Search for text inside a file with grep.',                    hint:'grep coffee ~/Documents/notes.txt' },
             { key:'pipe',     text:'Chain two commands together with a pipe.',                    hint:'cat ~/Documents/todo.txt | wc -l' },
+            { key:'chain',    text:'Use exit status to conditionally run another command.',       hint:'false || echo recovered' },
             { key:'find',     text:'Find a file somewhere in the filesystem.',                    hint:"find / -name '*.sh'" },
-            { key:'chmodX',   text:'Make a file executable with chmod.',                          hint:'chmod +x hello.py' },
+            { key:'chmodX',   text:'Make a file executable with chmod.',                          hint:'chmod +x ~/projects/scripts/hello.py' },
         ];
         function renderMissions() {
             missionsEl.innerHTML = '';
@@ -1071,7 +1156,7 @@ tmpfs            2048000        0   2048000   0% /tmp`);
                 if (trimmed) {
                     if (history[history.length - 1] !== trimmed) history.push(trimmed);
                     historyIndex = history.length;
-                    try { runLine(trimmed); } catch (err) { printLine('Error: ' + err.message, 'text-red-400'); }
+                    try { runLine(trimmed); saveSession(); } catch (err) { printLine('Error: ' + err.message, 'text-red-400'); }
                 }
                 setInput('');
                 scrollBottom();
@@ -1097,10 +1182,16 @@ tmpfs            2048000        0   2048000   0% /tmp`);
         });
 
         terminalEl.addEventListener('click', () => { if (window.getSelection().toString() === '') focusInput(); });
-        document.getElementById('reset-btn').addEventListener('click', () => { resetSession(true); focusInput(); });
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            if (window.confirm('Reset the simulated filesystem and all mission progress?')) {
+                localStorage.removeItem(STORAGE_KEY);
+                resetSession(true);
+            }
+            focusInput();
+        });
 
         // ------------------------------------------------------------------ Boot
-        resetSession(true);
+        if (!restoreSession()) resetSession(true);
         focusInput();
     });
     </script>
