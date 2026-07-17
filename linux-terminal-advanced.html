@@ -727,13 +727,16 @@
                     const { parent: sp, name: sn } = getParentAndName(src);
                     const node = sp && sp.children[sn];
                     if (!node) return bad(`mv: cannot stat '${src}': No such file or directory`);
-                    if (destNode && destNode.type === 'dir') {
-                        destNode.children[sn] = node;
-                    } else {
-                        const { parent: dp, name: dn } = getParentAndName(dest);
+                    let dp, dn;
+                    if (destNode && destNode.type === 'dir') { dp = destNode; dn = sn; }
+                    else {
+                        const pn = getParentAndName(dest);
+                        dp = pn.parent; dn = pn.name;
                         if (!dp) return bad(`mv: cannot move to '${dest}': No such file or directory`);
-                        dp.children[dn] = node;
                     }
+                    // Moving onto itself (e.g. `mv notes.txt .`) is a harmless no-op.
+                    if (dp === sp && dn === sn) continue;
+                    dp.children[dn] = node;
                     delete sp.children[sn];
                 }
                 return ok();
@@ -751,10 +754,17 @@
                         node.perms = mode.split('').map(d => map[+d]).join('');
                     } else if (/^[ugoa]*[+-][rwx]+$/.test(mode)) {
                         const add = mode.includes('+');
+                        const sep = mode.search(/[+-]/);
+                        let classes = mode.slice(0, sep);
+                        if (classes === '' || classes.includes('a')) classes = 'ugo';
+                        const permChars = mode.slice(sep + 1);
+                        const classBase = { u:0, g:3, o:6 };
+                        const permOffset = { r:0, w:1, x:2 };
                         const perms = node.perms.split('');
-                        const idxMap = { r:[0,3,6], w:[1,4,7], x:[2,5,8] };
-                        for (const ch of mode.replace(/^[ugoa]*[+-]/, '')) {
-                            for (const i of idxMap[ch] || []) perms[i] = add ? ch : '-';
+                        for (const cl of classes) {
+                            const base = classBase[cl];
+                            if (base === undefined) continue;
+                            for (const pc of permChars) perms[base + permOffset[pc]] = add ? pc : '-';
                         }
                         node.perms = perms.join('');
                     } else return bad(`chmod: invalid mode: '${mode}'`);
