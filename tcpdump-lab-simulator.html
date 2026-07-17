@@ -40,7 +40,7 @@
                     Cybersecurity Lab: tcpdump Simulator
                 </h1>
                 <p class="text-sm text-gray-400">
-                    Use the **STOP CAPTURE** button or type **`stop`** to halt an active process.
+                    Use the <strong class="text-gray-200">STOP CAPTURE</strong> button or type <code class="text-kali-green">stop</code> to halt an active process.
                 </p>
             </div>
             <button id="stop-button" 
@@ -94,6 +94,13 @@
             p.className = `whitespace-pre-wrap ${color}`;
             outputElement.appendChild(p);
             scrollToBottom();
+        }
+
+        /** Escapes HTML so user input can't break the terminal markup. */
+        function escapeHTML(str) {
+            return str.replace(/[&<>"']/g, (c) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[c]);
         }
 
         /** Generates a random IP address string. */
@@ -370,7 +377,7 @@
             }
 
             // Print the executed command before processing
-            printOutput(promptSpan.innerText + `<span class="${isSudo ? 'text-red-400' : 'text-gray-200'}">${command}</span>`);
+            printOutput(promptSpan.innerText + `<span class="${isSudo ? 'text-red-400' : 'text-gray-200'}">${escapeHTML(command)}</span>`);
 
             // Clear the input field immediately
             inputElement.value = '';
