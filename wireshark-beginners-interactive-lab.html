@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wireshark for Beginners - Interactive Lab</title>
+    <title>Wireshark Analysis Lab | Interactive Packet Investigation</title>
     <!-- Load Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -31,19 +31,30 @@
         }
     </style>
 </head>
-<body class="font-sans antialiased text-gray-200 bg-gray-900 h-screen flex flex-col overflow-hidden">
+<body class="font-sans antialiased text-gray-200 bg-gray-900 min-h-screen md:h-screen flex flex-col overflow-auto md:overflow-hidden">
 
     <!-- Header -->
-    <header class="w-full p-4 bg-gray-800 border-b border-gray-700 shadow-lg">
-        <h1 class="text-2xl font-bold text-center text-white">Wireshark for Beginners: Interactive Lab</h1>
+    <header class="w-full px-4 py-3 bg-gray-800 border-b border-gray-700 shadow-lg flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div>
+            <p class="text-xs font-semibold uppercase tracking-widest text-cyan-400">Packet analysis range</p>
+            <h1 class="text-2xl font-bold text-white">Wireshark: Interactive Traffic Investigation</h1>
+            <p class="text-xs text-gray-400">Display filters change the view; they never remove packets from the capture.</p>
+        </div>
+        <div class="flex gap-2 text-xs">
+            <span class="px-3 py-1 rounded-full border border-green-700 bg-green-950/40 text-green-300">Offline simulation</span>
+            <a href="https://github.com/cmatosxp/lab_simulations#readme" class="px-3 py-1 rounded-full border border-gray-600 text-gray-300 hover:border-blue-500">All labs</a>
+        </div>
     </header>
 
     <!-- Main Content (Lab + Simulator) -->
-    <div class="flex flex-1 h-full overflow-hidden">
+    <div class="flex flex-col md:flex-row flex-1 md:h-full overflow-visible md:overflow-hidden">
 
         <!-- Lab Guide Sidebar -->
-        <aside class="w-full md:w-1/3 lg:w-1/4 h-full flex flex-col p-4 bg-gray-800 border-r border-gray-700 overflow-y-auto">
-            <h2 class="text-xl font-semibold mb-4 text-white pb-2 border-b border-gray-600">Lab Steps</h2>
+        <aside class="w-full md:w-1/3 lg:w-1/4 md:h-full flex flex-col p-4 bg-gray-800 border-r border-gray-700 overflow-y-auto">
+            <div class="flex justify-between items-center mb-4 pb-2 border-b border-gray-600">
+                <h2 class="text-xl font-semibold text-white">Investigation</h2>
+                <span id="step-progress" class="font-mono text-xs text-cyan-300">1 / 8</span>
+            </div>
             <div id="step-content" class="flex-grow space-y-4">
                 <!-- Lab steps will be injected here by JavaScript -->
             </div>
@@ -59,10 +70,10 @@
         </aside>
 
         <!-- Wireshark Simulator -->
-        <main class="w-full md:w-2/3 lg:w-3/4 h-full flex flex-col bg-gray-900">
+        <main class="w-full md:w-2/3 lg:w-3/4 min-h-[760px] md:min-h-0 md:h-full flex flex-col bg-gray-900">
             
             <!-- Toolbar -->
-            <div class="flex items-center p-2 space-x-2 bg-gray-700 border-b border-gray-600">
+            <div class="flex flex-wrap items-center p-2 gap-2 bg-gray-700 border-b border-gray-600">
                 <button id="start-capture" title="Start Capture" class="p-2 text-green-400 bg-gray-800 rounded-lg hover:bg-gray-600">
                     <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" opacity="0.1" /><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.707-10.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L9.414 11H13a1 1 0 100-2H9.414l1.293-1.293z" clip-rule="evenodd" transform="rotate(90 10 10)"/></svg>
                 </button>
@@ -72,15 +83,22 @@
                 <button id="save-capture" title="Save Capture" class="p-2 text-blue-400 bg-gray-800 rounded-lg hover:bg-gray-600">
                     <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z"></path></svg>
                 </button>
+                <label class="text-xs text-gray-300 ml-2" for="interface-select">Interface</label>
+                <select id="interface-select" class="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-sm">
+                    <option value="eth0">eth0 — 192.168.1.10</option>
+                    <option value="lo">lo — 127.0.0.1</option>
+                </select>
+                <span id="capture-status" class="ml-auto px-2 py-1 rounded bg-gray-800 text-xs text-gray-300">● Idle</span>
             </div>
 
             <!-- Filter Bar -->
-            <div class="flex p-2 bg-gray-700">
-                <input id="filter-input" type="text" placeholder="Apply a display filter... (e.g., http)" class="flex-grow p-2 text-white bg-gray-800 border border-gray-600 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <div class="flex flex-wrap p-2 bg-gray-700 gap-y-1">
+                <input id="filter-input" type="text" placeholder="Apply a display filter... (e.g., http.request)" class="flex-grow p-2 text-white bg-gray-800 border border-gray-600 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" aria-describedby="filter-status">
                 <button id="apply-filter" class="px-4 py-2 font-semibold text-white bg-blue-600 rounded-r-lg hover:bg-blue-500 focus:outline-none">Apply</button>
                 <button id="clear-filter" title="Clear Filter" class="p-2 ml-2 text-gray-400 bg-gray-800 rounded-lg hover:bg-gray-600">
                     <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
                 </button>
+                <p id="filter-status" class="w-full text-xs text-gray-400" aria-live="polite">No display filter — showing all captured packets.</p>
             </div>
 
             <!-- Packet List Pane -->
@@ -104,12 +122,21 @@
             </div>
 
             <!-- Packet Details Pane -->
-            <div class="p-2 border-t-2 border-gray-700" style="height: 30vh;">
-                <h3 class="text-lg font-semibold text-white mb-2">Packet Details</h3>
-                <div class="h-full p-3 font-mono text-sm bg-gray-800 rounded-lg overflow-y-auto">
-                    <pre id="details-content">Select a packet to see its details.</pre>
-                </div>
+            <div class="p-2 border-t-2 border-gray-700 grid md:grid-cols-2 gap-2" style="height: 31vh; min-height: 220px;">
+                <section class="min-h-0 flex flex-col">
+                    <h3 class="text-sm font-semibold text-white mb-1">Packet details</h3>
+                    <div class="flex-1 p-3 font-mono text-xs bg-gray-800 rounded-lg overflow-y-auto"><pre id="details-content">Select a packet to inspect protocol fields.</pre></div>
+                </section>
+                <section class="min-h-0 flex flex-col">
+                    <h3 class="text-sm font-semibold text-white mb-1">Packet bytes</h3>
+                    <div class="flex-1 p-3 font-mono text-xs bg-gray-950 rounded-lg overflow-y-auto"><pre id="bytes-content">0000  -- -- -- -- -- -- -- --  -- -- -- -- -- -- -- --</pre></div>
+                </section>
             </div>
+
+            <footer class="px-3 py-1.5 bg-gray-800 border-t border-gray-700 flex justify-between text-xs text-gray-400">
+                <span id="packet-counter">Packets: 0 captured · 0 displayed</span>
+                <span id="selection-status">No packet selected</span>
+            </footer>
 
         </main>
     </div>
@@ -189,79 +216,76 @@
 
         const labSteps = [
             {
-                title: "Welcome to the Wireshark Lab!",
+                title: "Case briefing",
                 content: `
-                    <p>In this lab, we'll simulate using Wireshark to capture and analyze network traffic.</p>
-                    <p class="mt-2">Your role is a security analyst detecting traffic on a company server. Our (simulated) IP address is <strong>192.168.1.10</strong>.</p>
-                    <p class="mt-2">Click "Next" to begin.</p>
+                    <p>You are reviewing traffic from workstation <strong>192.168.1.10</strong> after a user reported an unexpected cleartext web request.</p>
+                    <p class="mt-2">Capture on <strong>eth0</strong>, isolate relevant conversations with display filters, and inspect packet fields before drawing a conclusion.</p>
+                    <p class="mt-2 text-cyan-300">Display filters affect only what is shown. The underlying capture remains intact.</p>
                 `,
                 task: () => true // No task, just intro
             },
             {
-                title: "Step 1: Start a Packet Capture",
+                title: "1. Capture traffic on eth0",
                 content: `
-                    <p>First, we need to start capturing packets.</p>
-                    <p class="mt-2">Click the <strong>Start Capture</strong> button (the green play icon) in the toolbar to begin the simulated packet capture.</p>
+                    <p>Confirm <strong>eth0 — 192.168.1.10</strong> is selected, then start the capture.</p>
+                    <p class="mt-2">Packets will arrive in time order. The capture stops automatically when the scenario traffic is complete.</p>
                 `,
                 task: (state) => state.captureStarted
             },
             {
-                title: "Step 2: Detect HTTPS Packets",
+                title: "2. Resolve the remote hosts",
                 content: `
-                    <p>Great! Packets are flowing. Now, let's filter for secure web traffic (HTTPS).</p>
-                    <p class="mt-2">HTTPS runs on top of <strong>TLS</strong> (Transport Layer Security).</p>
-                    <p class="mt-2">Type <code>tls</code> into the filter bar and click <strong>Apply</strong>.</p>
+                    <p>Apply the protocol filter <code>dns</code>, then select the response that resolves <strong>example.com</strong>.</p>
+                    <p class="mt-2">Inspect the transaction ID and answer address in the details pane.</p>
                 `,
-                task: (state) => state.filterText === 'tls'
+                task: (state) => state.filterKey === 'dns' && state.selectedPacket === 10
             },
             {
-                title: "Step 3: Practice - Detect HTTP Packets",
+                title: "3. Identify connection attempts",
                 content: `
-                    <p>Good. You've isolated the encrypted traffic. Now let's find the unencrypted traffic.</p>
-                    <p class="mt-2">Clear the filter, then type <code>http</code> into the filter bar and click <strong>Apply</strong>.</p>
+                    <p>Find packets where the TCP SYN flag is set:</p>
+                    <code class="block bg-gray-700 p-2 rounded-md my-2">tcp.flags.syn == 1</code>
+                    <p>This includes both the initial SYN and the SYN/ACK response.</p>
                 `,
-                task: (state) => state.filterText === 'http'
+                task: (state) => state.filterKey === 'tcp.flags.syn==1'
             },
             {
-                title: "Step 4: Detect a Specific IP Address",
+                title: "4. Inspect the cleartext request",
                 content: `
-                    <p>We visited <strong>example.com</strong>, which our DNS query (Packet 10) showed has the IP <strong>93.184.216.34</strong>.</p>
-                    <p class="mt-2">Let's find all traffic to AND from that server. Clear the filter, then type:</p>
+                    <p>Apply <code>http.request</code>, select packet <strong>14</strong>, and inspect the request line and Host header.</p>
+                    <p class="mt-2 text-yellow-300">HTTP payload is visible because this stream is not encrypted.</p>
+                `,
+                task: (state) => state.filterKey === 'http.request' && state.selectedPacket === 14
+            },
+            {
+                title: "5. Reconstruct the server conversation",
+                content: `
+                    <p>The DNS response identified <strong>93.184.216.34</strong>. Show traffic in either direction with:</p>
                     <code class="block bg-gray-700 p-2 rounded-md my-2">ip.addr == 93.184.216.34</code>
+                    <p>The result should preserve original frame numbers even though other packets are hidden.</p>
                 `,
-                task: (state) => state.filterText === 'ip.addr == 93.184.216.34'
+                task: (state) => state.filterKey === 'ip.addr==93.184.216.34'
             },
             {
-                title: "Step 5: Exclude an IP Address",
-                content: `
-                    <p>Sometimes you want to hide "noise" from your own machine (<strong>192.168.1.10</strong>) to see what else is on the network.</p>
-                    <p class="mt-2">Use the "not" operator (<code>!=</code>). Clear the filter, then type:</p>
-                    <code class="block bg-gray-700 p-2 rounded-md my-2">ip.addr != 192.168.1.10</code>
-                `,
-                task: (state) => state.filterText === 'ip.addr != 192.168.1.10'
-            },
-            {
-                title: "Step 6: Capstone Task",
+                title: "6. Scope outbound web traffic",
                 content: `
                     <p>Let's combine what we've learned.</p>
-                    <p class="mt-2"><strong>Goal:</strong> Find all HTTP and HTTPS packets that were <strong>sent from</strong> our computer (<strong>192.168.1.10</strong>).</p>
-                    <p class="mt-2">Use this filter:</p>
+                    <p class="mt-2"><strong>Goal:</strong> show HTTP or TLS packets sent by the workstation.</p>
                     <code class="block bg-gray-700 p-2 rounded-md my-2">(http || tls) && ip.src == 192.168.1.10</code>
                 `,
-                task: (state) => state.filterText === '(http || tls) && ip.src == 192.168.1.10'
+                task: (state) => state.filterKey === '(http||tls)&&ip.src==192.168.1.10'
             },
             {
-                title: "Project Complete!",
+                title: "Investigation complete",
                 content: `
-                    <p>Congratulations!</p>
-                    <p class="mt-2">You've successfully used Wireshark's display filters to capture and analyze web traffic.</p>
-                    <p class="mt-2">You now know how to:
+                    <p>You isolated DNS, inspected the TCP handshake, and confirmed that packet 14 contains a cleartext HTTP request to example.com.</p>
+                    <p class="mt-2">You practiced how to:
                         <ul class="list-disc list-inside ml-4 mt-2">
                             <li>Start and stop a capture</li>
                             <li>Filter for protocols (HTTP, TLS)</li>
                             <li>Filter for specific IPs</li>
-                            <li>Exclude IPs</li>
-                            <li>Combine filters with operators</li>
+                            <li>Inspect protocol fields and frame bytes</li>
+                            <li>Combine filters without altering captured data</li>
                         </ul>
                     </p>
                 `,
@@ -279,8 +303,15 @@
             const filterInput = document.getElementById('filter-input');
             const applyFilterBtn = document.getElementById('apply-filter');
             const clearFilterBtn = document.getElementById('clear-filter');
+            const filterStatus = document.getElementById('filter-status');
+            const interfaceSelect = document.getElementById('interface-select');
+            const captureStatus = document.getElementById('capture-status');
             const packetTableBody = document.querySelector('#packet-table tbody');
             const detailsContent = document.getElementById('details-content');
+            const bytesContent = document.getElementById('bytes-content');
+            const packetCounter = document.getElementById('packet-counter');
+            const selectionStatus = document.getElementById('selection-status');
+            const stepProgress = document.getElementById('step-progress');
             const stepContent = document.getElementById('step-content');
             const prevStepBtn = document.getElementById('prev-step');
             const nextStepBtn = document.getElementById('next-step');
@@ -298,7 +329,13 @@
             // Lab global state for task validation
             let labState = {
                 captureStarted: false,
-                filterText: ''
+                filterText: '',
+                filterKey: '',
+                selectedPacket: null,
+                selectedProtocol: null,
+                displayedCount: 0,
+                capturedCount: 0,
+                captureSaved: false
             };
 
             // --- Packet & Capture Logic ---
@@ -315,6 +352,8 @@
             function renderPacketList(packets) {
                 packetTableBody.innerHTML = '';
                 displayedPackets = packets;
+                labState.displayedCount = packets.length;
+                labState.capturedCount = capturedPackets.length;
 
                 packets.forEach((packet, index) => {
                     const tr = document.createElement('tr');
@@ -332,43 +371,75 @@
                     tr.addEventListener('click', () => showDetails(packet, tr));
                     packetTableBody.appendChild(tr);
                 });
+                packetCounter.textContent = `Packets: ${capturedPackets.length} captured · ${packets.length} displayed`;
+            }
+
+            function packetHex(packet) {
+                const seed = `${packet.src}|${packet.dst}|${packet.proto}|${packet.info}`;
+                const bytes = [];
+                for (let index = 0; index < Math.min(packet.len, 80); index++) {
+                    const code = seed.charCodeAt(index % seed.length);
+                    bytes.push((code + index * 17 + packet.no) % 256);
+                }
+                const lines = [];
+                for (let offset = 0; offset < bytes.length; offset += 16) {
+                    const chunk = bytes.slice(offset, offset + 16);
+                    const hex = chunk.map(value => value.toString(16).padStart(2, '0')).join(' ').padEnd(47, ' ');
+                    const ascii = chunk.map(value => value >= 32 && value <= 126 ? String.fromCharCode(value) : '.').join('');
+                    lines.push(`${offset.toString(16).padStart(4, '0')}  ${hex}  ${ascii}`);
+                }
+                return lines.join('\n');
             }
 
             function showDetails(packet, rowElement) {
                 detailsContent.textContent = packet.details;
+                bytesContent.textContent = packetHex(packet);
                 if (selectedRow) {
                     selectedRow.classList.remove('selected');
                 }
                 rowElement.classList.add('selected');
                 selectedRow = rowElement;
+                labState.selectedPacket = packet.no;
+                labState.selectedProtocol = packet.proto;
+                selectionStatus.textContent = `Selected frame ${packet.no} · ${packet.proto} · ${packet.len} bytes`;
+                checkTaskCompletion();
             }
 
             function startCapture() {
                 if (isCapturing) return;
+                if (interfaceSelect.value !== 'eth0') {
+                    showLabMessage('error', 'The loopback interface has no scenario traffic. Select eth0.');
+                    return;
+                }
                 isCapturing = true;
                 labState.captureStarted = true;
                 
                 capturedPackets = [];
                 captureIndex = 0;
+                labState.selectedPacket = null;
+                labState.selectedProtocol = null;
+                selectedRow = null;
+                selectionStatus.textContent = 'No packet selected';
                 renderPacketList(capturedPackets);
                 detailsContent.textContent = 'Capture in progress...';
+                bytesContent.textContent = 'Waiting for a selected frame...';
+                captureStatus.textContent = '● Capturing on eth0';
+                captureStatus.className = 'ml-auto px-2 py-1 rounded bg-red-950 text-xs text-red-300';
 
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
+                interfaceSelect.disabled = true;
 
                 captureInterval = setInterval(() => {
                     if (captureIndex < allPackets.length) {
                         const packet = allPackets[captureIndex];
                         capturedPackets.push(packet);
-                        // Only render if no filter is applied
-                        if (filterInput.value === '') {
-                            renderPacketList(capturedPackets);
-                        }
+                        applyCurrentFilter(false);
                         captureIndex++;
                     } else {
                         stopCapture();
                     }
-                }, 200); // Add one packet every 200ms
+                }, 120);
                 
                 checkTaskCompletion();
             }
@@ -379,60 +450,148 @@
                 clearInterval(captureInterval);
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
+                interfaceSelect.disabled = false;
+                captureStatus.textContent = `● Stopped · ${capturedPackets.length} packets`;
+                captureStatus.className = 'ml-auto px-2 py-1 rounded bg-gray-800 text-xs text-gray-300';
                 if (detailsContent.textContent === 'Capture in progress...') {
                     detailsContent.textContent = 'Capture stopped. Select a packet to see details.';
                 }
             }
             
             function saveCapture() {
-                showLabMessage('success', 'Capture saved to file (Simulation)');
+                if (!capturedPackets.length) {
+                    showLabMessage('error', 'No packets are available to save. Start the capture first.');
+                    return;
+                }
+                labState.captureSaved = true;
+                showLabMessage('success', `Saved incident-web-traffic.pcapng in simulated memory (${capturedPackets.length} packets).`);
             }
 
             // --- Filter Logic ---
 
-            function applyFilter() {
-                const filterText = filterInput.value.trim();
-                labState.filterText = filterText; // Update lab state
-                let filtered = [];
+            function canonicalFilter(text) {
+                return text.toLowerCase().replace(/\s+/g, '');
+            }
 
-                if (filterText === '') {
-                    filtered = capturedPackets;
-                } else {
-                    // Use a switch for the specific filters in the lab
-                    switch(filterText) {
-                        case 'http':
-                            filtered = capturedPackets.filter(p => p.proto === 'HTTP');
-                            break;
-                        case 'tls':
-                            filtered = capturedPackets.filter(p => p.proto.includes('TLS'));
-                            break;
-                        case 'ip.addr == 93.184.216.34':
-                            filtered = capturedPackets.filter(p => p.src === '93.184.216.34' || p.dst === '93.184.216.34');
-                            break;
-                        case 'ip.addr != 192.168.1.10':
-                            filtered = capturedPackets.filter(p => p.src !== '192.168.1.10' && p.dst !== '192.168.1.10');
-                            break;
-                        case '(http || tls) && ip.src == 192.168.1.10':
-                            filtered = capturedPackets.filter(p => (p.proto === 'HTTP' || p.proto.includes('TLS')) && p.src === '192.168.1.10');
-                            break;
-                        default:
-                            // Basic fallback for simple protocols
-                            filtered = capturedPackets.filter(p => p.proto.toLowerCase().includes(filterText.toLowerCase()));
-                            if (filtered.length === 0) {
-                                showLabMessage('error', 'Invalid or unsupported filter syntax for this lab.');
-                            }
+            function stripOuterParens(expression) {
+                let value = expression;
+                while (value.startsWith('(') && value.endsWith(')')) {
+                    let depth = 0;
+                    let wraps = true;
+                    for (let index = 0; index < value.length; index++) {
+                        if (value[index] === '(') depth++;
+                        if (value[index] === ')') depth--;
+                        if (depth === 0 && index < value.length - 1) { wraps = false; break; }
+                    }
+                    if (!wraps) break;
+                    value = value.slice(1, -1);
+                }
+                return value;
+            }
+
+            function splitTopLevel(expression, operator) {
+                let depth = 0;
+                for (let index = 0; index <= expression.length - operator.length; index++) {
+                    if (expression[index] === '(') depth++;
+                    else if (expression[index] === ')') depth--;
+                    if (depth === 0 && expression.slice(index, index + operator.length) === operator) {
+                        return [expression.slice(0, index), expression.slice(index + operator.length)];
                     }
                 }
-                
-                renderPacketList(filtered);
-                checkTaskCompletion();
+                return null;
             }
+
+            function packetPorts(packet) {
+                const match = packet.info.match(/(\d+)\s*→\s*(\d+)/);
+                return match ? [Number(match[1]), Number(match[2])] : [];
+            }
+
+            function compileFilter(expression) {
+                const value = stripOuterParens(expression);
+                const orParts = splitTopLevel(value, '||');
+                if (orParts) {
+                    const left = compileFilter(orParts[0]);
+                    const right = compileFilter(orParts[1]);
+                    return packet => left(packet) || right(packet);
+                }
+                const andParts = splitTopLevel(value, '&&');
+                if (andParts) {
+                    const left = compileFilter(andParts[0]);
+                    const right = compileFilter(andParts[1]);
+                    return packet => left(packet) && right(packet);
+                }
+
+                if (value === 'dns') return packet => packet.proto === 'DNS';
+                if (value === 'mdns') return packet => packet.proto === 'MDNS';
+                if (value === 'http') return packet => packet.proto === 'HTTP';
+                if (value === 'http.request') return packet => packet.proto === 'HTTP' && /^GET|^POST|^HEAD/.test(packet.info);
+                if (value === 'tls') return packet => packet.proto.includes('TLS');
+                if (value === 'tcp') return packet => packet.proto === 'TCP' || packet.proto === 'HTTP' || packet.proto.includes('TLS');
+                if (value === 'tcp.flags.syn==1' || value === 'tcp.flags.syn==true') return packet => /\[SYN(?:, ACK)?\]/.test(packet.info);
+
+                let match = value.match(/^ip\.(addr|src|dst)(==|!=)(\d{1,3}(?:\.\d{1,3}){3})$/);
+                if (match) {
+                    const [, field, operator, address] = match;
+                    return packet => {
+                        const equal = field === 'src' ? packet.src === address : field === 'dst' ? packet.dst === address : packet.src === address || packet.dst === address;
+                        return operator === '==' ? equal : !equal;
+                    };
+                }
+                match = value.match(/^tcp\.port==(\d{1,5})$/);
+                if (match) return packet => packetPorts(packet).includes(Number(match[1]));
+                match = value.match(/^frame\.number==(\d+)$/);
+                if (match) return packet => packet.no === Number(match[1]);
+                match = value.match(/^frame\.len(==|!=|>=|<=|>|<)(\d+)$/);
+                if (match) {
+                    const [, operator, amountText] = match;
+                    const amount = Number(amountText);
+                    return packet => ({ '==': packet.len === amount, '!=': packet.len !== amount, '>=': packet.len >= amount, '<=': packet.len <= amount, '>': packet.len > amount, '<': packet.len < amount })[operator];
+                }
+                throw new Error('Unsupported or incomplete display-filter expression');
+            }
+
+            function applyCurrentFilter(announce = true) {
+                const filterText = filterInput.value.trim();
+                const key = canonicalFilter(filterText);
+                labState.filterText = filterText;
+                labState.filterKey = key;
+                if (!key) {
+                    filterInput.removeAttribute('aria-invalid');
+                    filterInput.classList.remove('border-red-500', 'border-green-500');
+                    filterStatus.textContent = 'No display filter — showing all captured packets.';
+                    filterStatus.className = 'w-full text-xs text-gray-400';
+                    renderPacketList(capturedPackets);
+                    if (announce) checkTaskCompletion();
+                    return true;
+                }
+                try {
+                    const predicate = compileFilter(key);
+                    const filtered = capturedPackets.filter(predicate);
+                    filterInput.setAttribute('aria-invalid', 'false');
+                    filterInput.classList.remove('border-red-500');
+                    filterInput.classList.add('border-green-500');
+                    filterStatus.textContent = `Valid display filter — ${filtered.length} of ${capturedPackets.length} packets shown.`;
+                    filterStatus.className = 'w-full text-xs text-green-300';
+                    renderPacketList(filtered);
+                    if (announce) checkTaskCompletion();
+                    return true;
+                } catch (error) {
+                    labState.filterKey = '';
+                    filterInput.setAttribute('aria-invalid', 'true');
+                    filterInput.classList.remove('border-green-500');
+                    filterInput.classList.add('border-red-500');
+                    filterStatus.textContent = `Invalid filter: ${error.message}. Try dns, http.request, tcp.flags.syn == 1, ip.addr == 93.184.216.34, or tcp.port == 443.`;
+                    filterStatus.className = 'w-full text-xs text-red-300';
+                    if (announce) showLabMessage('error', 'Display filter rejected. Correct the syntax and apply it again.');
+                    return false;
+                }
+            }
+
+            function applyFilter() { applyCurrentFilter(true); }
 
             function clearFilter() {
                 filterInput.value = '';
-                labState.filterText = '';
-                renderPacketList(capturedPackets);
-                checkTaskCompletion();
+                applyCurrentFilter(true);
             }
 
             // --- Lab Step Logic ---
@@ -441,6 +600,7 @@
                 if (stepIndex < 0 || stepIndex >= labSteps.length) return;
                 
                 const step = labSteps[stepIndex];
+                stepProgress.textContent = `${stepIndex + 1} / ${labSteps.length}`;
                 stepContent.innerHTML = `
                     <h3 class="text-lg font-semibold text-white">${step.title}</h3>
                     <div class="space-y-2 text-gray-300">${step.content}</div>
@@ -455,6 +615,11 @@
             
             function checkTaskCompletion() {
                 const step = labSteps[currentStep];
+                if (currentStep === labSteps.length - 1) {
+                    showLabMessage('success', 'Investigation complete. You may continue exploring filters and packets.');
+                    nextStepBtn.disabled = true;
+                    return;
+                }
                 if (step.task(labState)) {
                     showLabMessage('success', 'Task complete!');
                     if (currentStep < labSteps.length - 1) {
