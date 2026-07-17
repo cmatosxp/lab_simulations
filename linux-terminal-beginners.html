@@ -275,7 +275,7 @@
             /**
              * Adds a line of text to the terminal output.
              */
-            function printToTerminal(text, isCommand = false) {
+            function printToTerminal(text, isCommand = false, isHTML = false) {
                 const div = document.createElement('div');
                 if (isCommand) {
                     // Re-create the prompt for the executed command
@@ -283,10 +283,14 @@
                     promptSpan.className = 'text-cyan-400 mr-2 shrink-0';
                     promptSpan.innerHTML = `<span>user@web-terminal:</span><span>${promptPath.textContent}</span>$`;
                     div.appendChild(promptSpan);
-                    
+
                     const cmdText = document.createElement('span');
                     cmdText.textContent = text;
                     div.appendChild(cmdText);
+                } else if (isHTML) {
+                    // Caller supplies trusted markup (e.g. colored help lines)
+                    div.style.whiteSpace = 'pre-wrap';
+                    div.innerHTML = text;
                 } else {
                     // Use pre-wrap to respect newlines in output (e.g., from 'cat')
                     div.style.whiteSpace = 'pre-wrap';
@@ -306,33 +310,29 @@
 
             const commands = {
                 'help': () => {
-                    printToTerminal('Available commands:');
-                    printToTerminal('  <span class="text-cyan-400">help</span>       - Show this help message');
-                    printToTerminal('  <span class="text-cyan-400">whoami</span>     - Find out what user we\'re currently logged in as!');
-                    printToTerminal('  <span class="text-cyan-400">ls [path]</span>  - (listing) List directory contents');
-                    printToTerminal('  <span class="text-cyan-400">cd [path]</span>  - (change directory) Change directory');
-                    printToTerminal('  <span class="text-cyan-400">pwd</span>        - (print working directory) Print working directory');
-                    printToTerminal('  <span class="text-cyan-400">cat [file]</span>   - (concatenate) Display file contents');
-                    printToTerminal('  <span class="text-cyan-400">echo [text]</span>  - Output any text that we provide');
-                    printToTerminal('  <span class="text-cyan-400">mkdir [name]</span> - Create a new directory');
-                    printToTerminal('  <span class="text-cyan-400">touch [name]</span> - Create a new empty file');
-                    printToTerminal('  <span class="text-cyan-400">rm [file]</span>    - Remove a file');
-                    printToTerminal('  <span class="text-cyan-400">rmdir [dir]</span>  - Remove an empty directory');
-                    printToTerminal('  <span class="text-cyan-400">ip a | grep inet</span> - Show IPv4 addresses');
-                    printToTerminal('  <span class="text-cyan-400">clear</span>      - Clear the terminal screen');
-                    // We need to use innerHTML to render the spans
-                    terminalOutput.lastChild.innerHTML = '  <span class="text-cyan-400">clear</span>      - Clear the terminal screen';
-                    terminalOutput.childNodes[terminalOutput.childNodes.length - 2].innerHTML = '  <span class="text-cyan-400">ip a | grep inet</span> - Show IPv4 addresses';
-                    terminalOutput.childNodes[terminalOutput.childNodes.length - 3].innerHTML = '  <span class="text-cyan-400">rmdir [dir]</span>  - Remove an empty directory';
-                    terminalOutput.childNodes[terminalOutput.childNodes.length - 4].innerHTML = '  <span class="text-cyan-400">rm [file]</span>    - Remove a file';
-                    terminalOutput.childNodes[terminalOutput.childNodes.length - 5].innerHTML = '  <span class="text-cyan-400">touch [name]</span> - Create a new empty file';
-                    terminalOutput.childNodes[terminalOutput.childNodes.length - 6].innerHTML = '  <span class="text-cyan-400">mkdir [name]</span> - Create a new directory';
-                    terminalOutput.childNodes[terminalOutput.childNodes.length - 7].innerHTML = '  <span class="text-cyan-400">echo [text]</span>  - Output any text that we provide';
-                    terminalOutput.childNodes[terminalOutput.childNodes.length - 9].innerHTML = '  <span class="text-cyan-400">cd [path]</span>  - (change directory) Change directory';
-                    terminalOutput.childNodes[terminalOutput.childNodes.length - 10].innerHTML = '  <span class="text-cyan-400">ls [path]</span>  - (listing) List directory contents';
-                    terminalOutput.childNodes[terminalOutput.childNodes.length - 12].innerHTML = '  <span class="text-cyan-400">whoami</span>     - Find out what user we\'re currently logged in as!';
-                    terminalOutput.childNodes[terminalOutput.childNodes.length - 13].innerHTML = '  <span class="text-cyan-400">help</span>       - Show this help message';
+                    const helpLines = [
+                        ['help', 'Show this help message'],
+                        ['whoami', 'Find out what user we\'re currently logged in as!'],
+                        ['ls [path]', '(listing) List directory contents'],
+                        ['cd [path]', '(change directory) Change directory'],
+                        ['pwd', '(print working directory) Print working directory'],
+                        ['cat [file]', '(concatenate) Display file contents'],
+                        ['echo [text]', 'Output any text that we provide'],
+                        ['mkdir [name]', 'Create a new directory'],
+                        ['touch [name]', 'Create a new empty file'],
+                        ['rm [file]', 'Remove a file'],
+                        ['rmdir [dir]', 'Remove an empty directory'],
+                        ['ip a | grep inet', 'Show IPv4 addresses'],
+                        ['clear', 'Clear the terminal screen'],
+                    ];
 
+                    printToTerminal('Available commands:');
+                    // Pad the command column so descriptions line up neatly.
+                    const width = Math.max(...helpLines.map(([cmd]) => cmd.length));
+                    for (const [cmd, description] of helpLines) {
+                        const padding = ' '.repeat(width - cmd.length + 2);
+                        printToTerminal(`  <span class="text-cyan-400">${cmd}</span>${padding}- ${description}`, false, true);
+                    }
                 },
                 'whoami': () => {
                     printToTerminal('user');
